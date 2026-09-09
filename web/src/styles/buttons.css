@@ -1,0 +1,70 @@
+.btn-primary,
+.login-submit {
+  appearance: none;
+  border: none;
+  border-radius: 980px;
+  padding: 15px 22px;
+  background: linear-gradient(
+    90deg,
+    var(--color-accent) 0%,
+    var(--color-accent-mid) 55%,
+    var(--color-accent-deep) 100%
+  );
+  color: var(--color-white);
+  font-family: var(--font-text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(56, 180, 229, 0.35);
+  transition: filter 160ms ease, transform 120ms ease, box-shadow 160ms ease;
+}
+
+.btn-primary:hover:not(:disabled),
+.login-submit:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 14px 32px rgba(56, 180, 229, 0.5);
+}
+
+.btn-primary:active:not(:disabled),
+.login-submit:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.btn-primary:disabled,
+.login-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.btn-secondary,
+.login-microsoft {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 18px;
+  border-radius: 980px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-white);
+  color: var(--color-navy);
+  font-family: var(--font-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(17, 29, 51, 0.06);
+  transition: background 160ms ease, border-color 160ms ease, transform 120ms ease;
+}
+
+.btn-secondary:hover,
+.login-microsoft:hover {
+  background: #f7fbfe;
+  border-color: rgba(56, 180, 229, 0.45);
+}
+
+.btn-secondary:active,
+.login-microsoft:active {
+  transform: scale(0.985);
+}

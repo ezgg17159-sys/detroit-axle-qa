@@ -1,0 +1,24 @@
+:root {
+  --color-accent: #38b4e5;
+  --color-accent-mid: #2a9fc9;
+  --color-accent-deep: #217fa8;
+  --color-navy: #111d33;
+  --color-navy-deep: #0c1528;
+  --color-white: #ffffff;
+  --color-muted: #6e7a8c;
+  --color-placeholder: #8a96a8;
+  --color-border: rgba(17, 29, 51, 0.14);
+  --color-border-strong: rgba(17, 29, 51, 0.16);
+  --color-danger: #b00012;
+  --color-danger-bg: rgba(215, 0, 21, 0.08);
+  --color-danger-border: rgba(215, 0, 21, 0.28);
+  --color-success: #0d7a45;
+  --color-success-bg: rgba(13, 122, 69, 0.08);
+  --color-success-border: rgba(13, 122, 69, 0.28);
+  --color-info: #217fa8;
+  --color-info-bg: rgba(56, 180, 229, 0.12);
+  --color-info-border: rgba(56, 180, 229, 0.35);
+  --surface-toast: #ffffff;
+  --font-text: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
