@@ -1,0 +1,313 @@
+.rankings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  padding: 14px 18px 16px;
+  background: var(--surface-page);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.rankings-page__toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.rankings-page__filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rankings-filter {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 156px;
+}
+
+.rankings-filter__label {
+  font-family: var(--font-text);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.rankings-filter__trigger {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--surface-card);
+  color: var(--color-navy);
+  font-family: var(--font-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.rankings-filter__trigger:hover,
+.rankings-filter__trigger.is-open,
+.rankings-filter__trigger:focus-visible {
+  border-color: rgba(56, 180, 229, 0.55);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(56, 180, 229, 0.14);
+}
+
+.rankings-filter__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rankings-filter__chevron {
+  flex-shrink: 0;
+  color: var(--color-muted);
+  transition: transform 160ms ease;
+}
+
+.rankings-filter__trigger.is-open .rankings-filter__chevron {
+  transform: rotate(180deg);
+}
+
+.rankings-filter__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--surface-menu);
+  border: 1px solid var(--surface-menu-border);
+  box-shadow: var(--shadow-menu);
+  animation: rankings-filter-in 160ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes rankings-filter-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rankings-filter__option {
+  appearance: none;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-on-menu);
+  font-family: var(--font-text);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.rankings-filter__option:hover {
+  background: var(--surface-menu-hover);
+}
+
+.rankings-filter__option.is-active {
+  background: rgba(56, 180, 229, 0.16);
+  color: var(--color-accent-deep);
+  font-weight: 600;
+}
+
+[data-theme="dark"] .rankings-filter__option.is-active {
+  color: #7fd4f0;
+}
+
+.rankings-top {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  flex-shrink: 0;
+  align-items: stretch;
+}
+
+.rankings-podium {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 16px 18px 14px;
+  border-radius: 12px;
+  background: var(--surface-card);
+  border: 1px solid rgba(17, 29, 51, 0.08);
+}
+
+.rankings-podium--1 {
+  border-color: rgba(56, 180, 229, 0.4);
+  box-shadow: 0 8px 24px rgba(17, 29, 51, 0.06);
+}
+
+.rankings-podium__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rankings-podium__title {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--color-navy);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rankings-podium__place {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--color-navy);
+}
+
+.rankings-podium--1 .rankings-podium__place {
+  color: var(--color-accent-deep);
+}
+
+.rankings-podium--3 .rankings-podium__place {
+  color: #9a6408;
+}
+
+.rankings-podium__sep {
+  flex-shrink: 0;
+  color: var(--color-muted);
+  font-weight: 500;
+}
+
+.rankings-podium__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rankings-podium__badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 6px;
+  background: rgba(56, 180, 229, 0.12);
+  color: var(--color-accent-deep);
+  font-family: var(--font-text);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.rankings-podium__footer {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid rgba(17, 29, 51, 0.08);
+}
+
+.rankings-podium__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.rankings-podium__divider {
+  width: 1px;
+  margin: 0 12px;
+  background: rgba(17, 29, 51, 0.1);
+  align-self: stretch;
+}
+
+.rankings-podium__stat-label {
+  font-family: var(--font-text);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.rankings-podium__stat-value {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--color-navy);
+}
+
+.rankings-table-wrap {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 1100px) {
+  .rankings-top {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .rankings-page {
+    overflow: auto;
+  }
+
+  .rankings-page__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rankings-page__filters {
+    width: 100%;
+  }
+
+  .rankings-filter {
+    flex: 1;
+  }
+}

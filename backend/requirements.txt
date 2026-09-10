@@ -3,6 +3,7 @@ Django==6.1.1
 django-cors-headers==4.9.0
 djangorestframework==3.18.1
 djangorestframework_simplejwt==5.5.1
+psycopg2-binary==2.9.11
 PyJWT==2.13.0
 sqlparse==0.6.0
 tzdata==2026.3

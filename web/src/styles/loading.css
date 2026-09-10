@@ -1,0 +1,146 @@
+/* United loading — Swirling loader */
+@keyframes swirling-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes swirling-dash {
+  0% {
+    stroke-dasharray: 1, 800;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 400, 400;
+    stroke-dashoffset: -200px;
+  }
+  100% {
+    stroke-dasharray: 800, 1;
+    stroke-dashoffset: -800px;
+  }
+}
+
+.swirling {
+  display: block;
+  --swirl-duration: 1.5s;
+}
+
+.swirling__circle {
+  transform-origin: center;
+  animation:
+    swirling-dash var(--swirl-duration) ease-in-out infinite alternate,
+    swirling-spin calc(var(--swirl-duration) * 1.333333) linear infinite;
+}
+
+.app-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.app-loader--page {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  color: var(--color-accent-deep);
+}
+
+.app-loader--inline {
+  padding: 24px;
+  color: var(--color-accent-deep);
+}
+
+.app-loader--splash {
+  gap: 10px;
+  color: var(--color-accent);
+}
+
+.app-loader--button {
+  flex-direction: row;
+  gap: 8px;
+  color: currentColor;
+}
+
+.app-loader__swirl {
+  width: 48px;
+  height: 48px;
+}
+
+.app-loader__swirl--splash {
+  width: 56px;
+  height: 56px;
+}
+
+.app-loader__swirl--page,
+.app-loader__swirl--inline {
+  width: 48px;
+  height: 48px;
+}
+
+.app-loader__swirl--button {
+  width: 18px;
+  height: 18px;
+}
+
+.app-loader__label {
+  margin: 0;
+  font-family: var(--font-text);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: inherit;
+}
+
+.app-loader--splash .app-loader__label {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.app-loader--page .app-loader__label,
+.app-loader--inline .app-loader__label {
+  color: var(--color-muted);
+}
+
+.app-loader--button .app-loader__label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: inherit;
+}
+
+.app-loader-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1900;
+  display: grid;
+  place-items: center;
+  background: var(--surface-page);
+}
+
+.app-loader-overlay--shell {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: rgba(245, 247, 250, 0.82);
+  backdrop-filter: blur(2px);
+}
+
+[data-theme="dark"] .app-loader-overlay {
+  background: var(--surface-page);
+}
+
+[data-theme="dark"] .app-loader-overlay--shell {
+  background: rgba(12, 21, 40, 0.82);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swirling__circle {
+    animation: swirling-spin 1.8s linear infinite;
+  }
+}

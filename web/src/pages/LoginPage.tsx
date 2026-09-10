@@ -1,9 +1,13 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import { AppLoader } from "../components/AppLoader";
+import { EyeIcon, EyeOffIcon } from "../icons/EyeIcon";
 import { MicrosoftIcon } from "../icons/MicrosoftIcon";
 import { useNotify } from "../notifications/NotificationContext";
+
+const HERO_AUTO_MS = 20_000;
 
 export function LoginPage() {
   const { isAuthenticated, login } = useAuth();
@@ -12,7 +16,58 @@ export function LoginPage() {
   const [loginValue, setLoginValue] = useState("");
   const [password, setPassword] = useState("");
   const [keepSignedIn, setKeepSignedIn] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [heroPage, setHeroPage] = useState(0);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+  const heroSlides = [
+    {
+      id: "brand",
+      content: (
+            <div className="login-branding">
+              <img
+                className="login-logo"
+                src="/detroit-axle-logo.png"
+                alt="Detroit Axle"
+              />
+            </div>
+      ),
+    },
+    {
+      id: "quality",
+      content: (
+        <div className="login-hero-copy">
+          <h2 className="login-hero-copy__title">Stay on track</h2>
+          <p className="login-hero-copy__text">
+            Keep on track with your employees’ quality work, catch issues early,
+            and notify them the moment something needs attention.
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: "performance",
+      content: (
+        <div className="login-hero-copy">
+          <h2 className="login-hero-copy__title">
+            Keep track on your QA for better performance and get notified
+          </h2>
+          <p className="login-hero-copy__text">
+            Monitor audit scores, spot trends across teams, and get alerts when
+            quality drops so you can act before it becomes a bigger problem.
+          </p>
+        </div>
+      ),
+    },
+  ] as const;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setHeroPage((page) => (page + 1) % heroSlides.length);
+    }, HERO_AUTO_MS);
+    return () => window.clearInterval(timer);
+  }, [heroPage, heroSlides.length]);
 
   if (isAuthenticated) {
     return <Navigate to="/" replace />;
@@ -94,12 +149,49 @@ export function LoginPage() {
           </svg>
         </div>
 
-        <div className="login-branding">
-          <img
-            className="login-logo"
-            src="/detroit-axle-logo.png"
-            alt="Detroit Axle"
-          />
+        <div
+          className="login-hero-slider"
+          onTouchStart={(event) => setTouchStartX(event.changedTouches[0]?.clientX ?? null)}
+          onTouchEnd={(event) => {
+            if (touchStartX === null) return;
+            const delta = (event.changedTouches[0]?.clientX ?? touchStartX) - touchStartX;
+            if (Math.abs(delta) < 40) return;
+            setHeroPage((page) =>
+              delta < 0
+                ? Math.min(page + 1, heroSlides.length - 1)
+                : Math.max(page - 1, 0),
+            );
+            setTouchStartX(null);
+          }}
+        >
+          <div
+            className="login-hero-track"
+            style={{ transform: `translateX(-${heroPage * 100}%)` }}
+          >
+            {heroSlides.map((slide) => (
+              <div className="login-hero-slide" key={slide.id}>
+                {slide.content}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="login-pager" role="tablist" aria-label="Intro pages">
+          {heroSlides.map((slide, index) => (
+            <button
+              key={slide.id}
+              type="button"
+              role="tab"
+              aria-selected={heroPage === index}
+              aria-label={`Go to page ${index + 1}`}
+              className={
+                heroPage === index
+                  ? "login-pager__dot login-pager__dot--active"
+                  : "login-pager__dot"
+              }
+              onClick={() => setHeroPage(index)}
+            />
+          ))}
         </div>
 
         <p className="login-credit">Created by Rashed Kattan</p>
@@ -124,18 +216,29 @@ export function LoginPage() {
               aria-label="Email or username"
             />
 
-            <input
-              id="password"
-              name="password"
-              className="login-input"
-              type="password"
-              autoComplete="current-password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              aria-label="Password"
-            />
+            <div className="login-password">
+              <input
+                id="password"
+                name="password"
+                className="login-input login-input--password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                aria-label="Password"
+              />
+              <button
+                type="button"
+                className="login-password-toggle"
+                onClick={() => setShowPassword((value) => !value)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+              >
+                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+              </button>
+            </div>
 
             <div className="login-row">
               <label className="login-check">
@@ -146,11 +249,25 @@ export function LoginPage() {
                 />
                 <span>Keep me signed in</span>
               </label>
-              <span className="login-link">Already a member?</span>
+              <button
+                type="button"
+                className="login-forgot"
+                onClick={() =>
+                  notify("Password reset will be available soon.", {
+                    variant: "info",
+                  })
+                }
+              >
+                Forgot password?
+              </button>
             </div>
 
             <button className="btn-primary login-submit" type="submit" disabled={submitting}>
-              {submitting ? "SIGNING IN…" : "LOGIN"}
+              {submitting ? (
+                <AppLoader variant="button" label="Signing in…" />
+              ) : (
+                "LOGIN"
+              )}
             </button>
 
             <div className="login-divider" role="separator" aria-label="or">

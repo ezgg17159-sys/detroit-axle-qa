@@ -21,7 +21,9 @@
 | Name | File / usage | Notes |
 |------|----------------|-------|
 | Microsoft mark | Inline SVG in login | Official 4-color squares — keep brand colors |
-| Detroit Axle logo | `/detroit-axle-logo.png` | Raster logo with cyan glow on brand panel |
+| Dashboard | `web/src/icons/NavIcons.tsx` | Sidebar navigation |
+| Eye / EyeOff | `web/src/icons/EyeIcon.tsx` | Show/hide password toggle |
+| Detroit Axle logo | `/detroit-axle-logo.png` | Official brand mark |
 
 ## Rules
 - Add new icons as React SVG components in `web/src/icons/` and document them here.

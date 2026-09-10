@@ -23,6 +23,8 @@ def serialize_user(user):
         "username": user.username,
         "email": user.email,
         "full_name": full_name or user.username,
+        "is_staff": user.is_staff,
+        "is_superuser": user.is_superuser,
     }
 
 

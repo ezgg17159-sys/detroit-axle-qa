@@ -1,10 +1,16 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
+const API_URL = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+
+function apiPath(path: string): string {
+  return `${API_URL}${path}`;
+}
 
 export type AuthUser = {
   id: number;
   username: string;
   email: string;
   full_name: string;
+  is_staff?: boolean;
+  is_superuser?: boolean;
 };
 
 export type LoginResponse = {
@@ -47,11 +53,18 @@ export async function loginRequest(
   login: string,
   password: string,
 ): Promise<LoginResponse> {
-  const response = await fetch(`${API_URL}/api/auth/login/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ login, password }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(apiPath("/api/auth/login/"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ login, password }),
+    });
+  } catch {
+    throw new Error(
+      "Cannot reach the API. Make sure Django is running on port 8000.",
+    );
+  }
 
   const data = await response.json().catch(() => ({}));
 
@@ -67,9 +80,16 @@ export async function loginRequest(
 }
 
 export async function fetchMe(accessToken: string): Promise<AuthUser> {
-  const response = await fetch(`${API_URL}/api/auth/me/`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  let response: Response;
+  try {
+    response = await fetch(apiPath("/api/auth/me/"), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  } catch {
+    throw new Error(
+      "Cannot reach the API. Make sure Django is running on port 8000.",
+    );
+  }
 
   if (!response.ok) {
     throw new Error("Session expired.");

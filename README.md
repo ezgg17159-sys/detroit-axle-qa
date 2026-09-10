@@ -18,31 +18,52 @@ Employee QA tracking system — Django API + React (Vite) web app.
 
 ## Quick start
 
-### Backend
+### Run both (API + web)
+```powershell
+cd "d:\NEW QA SYSTEM"
+.\dev.ps1
+```
+
+- API: `http://127.0.0.1:8000`
+- App: `http://127.0.0.1:5173`
+
+Ctrl+C stops both.
+
+### First-time setup
 ```powershell
 cd "d:\NEW QA SYSTEM"
 .\.venv\Scripts\Activate.ps1
 cd backend
 python manage.py migrate
-python manage.py seed_demo_user
-python manage.py runserver
+python manage.py seed_superadmin
+cd ..\web
+npm install
 ```
 
-API: `http://127.0.0.1:8000`
+Superadmin (local development):
+- Username: `superadmin`
+- Email: `superadmin@detroitaxle.com`
+- Password: `SuperAdmin123!`
 
-Demo account:
+Optional demo employee:
+```powershell
+cd backend
+python manage.py seed_demo_user
+```
 - Username: `demo`
 - Email: `demo@detroitaxle.com`
 - Password: `DemoPass123!`
 
-### Frontend
+### Run separately
 ```powershell
+# Backend
+cd "d:\NEW QA SYSTEM\backend"
+..\.venv\Scripts\python.exe manage.py runserver 8000
+
+# Frontend (other terminal)
 cd "d:\NEW QA SYSTEM\web"
-npm install
 npm run dev
 ```
-
-App: `http://localhost:5173`
 
 ## Auth endpoints
 - `POST /api/auth/login/` — body `{ "login": "email or username", "password": "..." }`

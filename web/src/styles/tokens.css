@@ -1,4 +1,5 @@
-:root {
+:root,
+[data-theme="light"] {
   --color-accent: #38b4e5;
   --color-accent-mid: #2a9fc9;
   --color-accent-deep: #217fa8;
@@ -19,6 +20,41 @@
   --color-info-bg: rgba(56, 180, 229, 0.12);
   --color-info-border: rgba(56, 180, 229, 0.35);
   --surface-toast: #ffffff;
+  --surface-page: #f5f7fa;
+  --surface-card: #ffffff;
+  --surface-menu: #ffffff;
+  --surface-menu-border: rgba(17, 29, 51, 0.1);
+  --surface-menu-hover: rgba(56, 180, 229, 0.1);
+  --text-primary: #111d33;
+  --text-secondary: #6e7a8c;
+  --text-on-menu: #111d33;
+  --shadow-menu:
+    0 8px 24px rgba(17, 29, 51, 0.1),
+    0 2px 6px rgba(17, 29, 51, 0.05);
   --font-text: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-display: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --color-navy: #e8eef7;
+  --color-navy-deep: #0c1528;
+  --color-white: #0f1a2b;
+  --color-muted: #9aabbf;
+  --color-placeholder: #7d8da3;
+  --color-border: rgba(255, 255, 255, 0.12);
+  --color-border-strong: rgba(255, 255, 255, 0.18);
+  --surface-toast: #1a2b44;
+  --surface-page: #0b1422;
+  --surface-card: #132238;
+  --surface-menu: #1a2b44;
+  --surface-menu-border: rgba(56, 180, 229, 0.28);
+  --surface-menu-hover: rgba(56, 180, 229, 0.18);
+  --text-primary: #e8eef7;
+  --text-secondary: #9aabbf;
+  --text-on-menu: #e8eef7;
+  --shadow-menu:
+    0 12px 32px rgba(0, 0, 0, 0.4),
+    0 4px 10px rgba(0, 0, 0, 0.25);
+  color-scheme: dark;
 }
