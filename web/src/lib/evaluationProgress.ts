@@ -1,6 +1,6 @@
 import type { AuditTeam } from "./audits";
 import { listAudits, listAgents } from "./audits";
-import { startOfDay, type DateRange } from "./dateRange";
+import { startOfDay, toIsoDate, employeeAuditsDeepLink, type DateRange } from "./dateRange";
 
 export type ProgressAgent = {
   id: string;
@@ -98,6 +98,21 @@ export function toggleDayOff(agentId: string, iso: string): boolean {
   return current.has(iso);
 }
 
+/** Inclusive calendar-day check for the selected date range. */
+export function isoInDateRange(iso: string, range: DateRange): boolean {
+  if (!range.start || !range.end) return false;
+  const day = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(day.getTime())) return false;
+  const t = startOfDay(day).getTime();
+  const start = startOfDay(range.start).getTime();
+  const end = startOfDay(range.end).getTime();
+  return t >= start && t <= end;
+}
+
+/**
+ * Average of each day's QA score in the selected range (skips off days / empty days).
+ * Day score is already the mean of that day's audits when multiple exist.
+ */
 export function averageInRange(
   agentId: string,
   range: DateRange,
@@ -119,68 +134,156 @@ export function averageInRange(
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
+/** Live grid cells keyed by day-of-month — average only days inside `range`. */
+export function averageFromLiveDays(
+  days: Record<string, { score?: number | null; off?: boolean }> | undefined,
+  range: DateRange,
+  year: number,
+  monthIndex: number,
+): number | null {
+  if (!days || !range.start || !range.end) return null;
+  const values: number[] = [];
+  const dayCount = daysInMonth(year, monthIndex);
+  for (let day = 1; day <= dayCount; day += 1) {
+    const iso = isoDate(year, monthIndex, day);
+    if (!isoInDateRange(iso, range)) continue;
+    const cell = days[String(day)];
+    if (!cell || cell.off) continue;
+    if (typeof cell.score === "number" && Number.isFinite(cell.score)) {
+      values.push(cell.score);
+    }
+  }
+  if (values.length === 0) return null;
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
 export function formatAvgLabel(avg: number | null): string {
-  return avg === null ? "—" : `${avg}%`;
+  return avg === null ? "-" : `${avg}%`;
 }
 
-export type EmailAvgPeriod = "last-2-days" | "week" | "month";
+export type PendingReevalRow = {
+  agentId: string;
+  name: string;
+  /** ISO dates (YYYY-MM-DD) that still need re-evaluation */
+  days: string[];
+};
 
-export function emailPeriodLabel(period: EmailAvgPeriod): string {
-  if (period === "last-2-days") return "last 2 days";
-  if (period === "week") return "last week";
-  return "last month";
+/**
+ * Audits in range for the given agents that are not marked re-evaluated,
+ * grouped by agent with unique days.
+ */
+export function findPendingReevaluations(
+  agentIds: string[],
+  range: DateRange,
+  agents: Array<{ id: string; name: string }>,
+  audits: Array<{ agentId: string; date: string; reevaluated?: boolean }>,
+): PendingReevalRow[] {
+  if (!range.start || !range.end || agentIds.length === 0) return [];
+  const idSet = new Set(agentIds);
+  const nameById = new Map(agents.map((agent) => [agent.id, agent.name]));
+  const daysByAgent = new Map<string, Set<string>>();
+
+  for (const audit of audits) {
+    if (!idSet.has(audit.agentId)) continue;
+    if (!audit.date || !isoInDateRange(audit.date, range)) continue;
+    if (audit.reevaluated) continue;
+    let days = daysByAgent.get(audit.agentId);
+    if (!days) {
+      days = new Set();
+      daysByAgent.set(audit.agentId, days);
+    }
+    days.add(audit.date);
+  }
+
+  return agentIds
+    .filter((id) => daysByAgent.has(id))
+    .map((id) => ({
+      agentId: id,
+      name: nameById.get(id) || id,
+      days: Array.from(daysByAgent.get(id)!).sort(),
+    }));
 }
 
-/** Averaging window for the email action presets. */
-export function rangeForEmailPeriod(period: EmailAvgPeriod, today = new Date()): DateRange {
-  const end = startOfDay(today);
-  const start = new Date(end);
-  if (period === "last-2-days") start.setDate(end.getDate() - 1);
-  else if (period === "week") start.setDate(end.getDate() - 6);
-  else start.setDate(end.getDate() - 29);
-  return { start, end };
+export function pendingReevalDaySet(pending: PendingReevalRow[]): Set<string> {
+  const keys = new Set<string>();
+  for (const row of pending) {
+    for (const day of row.days) {
+      keys.add(`${row.agentId}:${day}`);
+    }
+  }
+  return keys;
 }
+
+export type AvgEmailAgent = ProgressAgent & {
+  days?: Record<string, { score?: number | null; off?: boolean }>;
+};
 
 export type AvgEmailPayload = {
-  period: EmailAvgPeriod;
-  range: { start: string | null; end: string | null };
+  period: "date-range";
+  range: { start: string; end: string };
   recipients: Array<{
     agentId: string;
     name: string;
     alias: string;
     team: AuditTeam;
-    avgQa: number | null;
+    /** Always a number for Power Automate schemas (0 when no score). */
+    avgQa: number;
+    hasAvg: boolean;
+    /** Inclusive calendar dates for the email period. */
+    rangeStart: string;
+    rangeEnd: string;
+    /** Opens My Audits with this date range applied. */
+    auditsUrl: string;
   }>;
 };
 
-/** Build payload for the future Power Automate email flow. */
+/** Build payload using the page date range + mean of each day's QA score. */
 export function buildAvgEmailPayload(
   agentIds: string[],
-  period: EmailAvgPeriod,
+  range: DateRange,
+  agentsOverride?: AvgEmailAgent[],
 ): AvgEmailPayload {
-  const range = rangeForEmailPeriod(period);
-  const agents = listProgressAgents().filter((agent) => agentIds.includes(agent.id));
+  if (!range.start || !range.end) {
+    throw new Error("Select a date range before sending the avg QA email.");
+  }
+  const pool: AvgEmailAgent[] = agentsOverride?.length
+    ? agentsOverride
+    : listProgressAgents();
+  const agents = pool.filter((agent) => agentIds.includes(agent.id));
+  const { year, month } = monthFromRange(range);
+  const rangeStart = toIsoDate(range.start);
+  const rangeEnd = toIsoDate(range.end);
+  const auditsUrl = employeeAuditsDeepLink(rangeStart, rangeEnd);
   return {
-    period,
+    period: "date-range",
     range: {
-      start: range.start?.toISOString() ?? null,
-      end: range.end?.toISOString() ?? null,
+      start: startOfDay(range.start).toISOString(),
+      end: startOfDay(range.end).toISOString(),
     },
-    recipients: agents.map((agent) => ({
-      agentId: agent.id,
-      name: agent.name,
-      alias: agent.alias,
-      team: agent.team,
-      avgQa: averageInRange(agent.id, range),
-    })),
+    recipients: agents.map((agent) => {
+      const avg =
+        agent.days && Object.keys(agent.days).length > 0
+          ? averageFromLiveDays(agent.days, range, year, month)
+          : averageInRange(agent.id, range);
+      return {
+        agentId: agent.id,
+        name: agent.name,
+        alias: agent.alias,
+        team: agent.team,
+        avgQa: avg == null || Number.isNaN(avg) ? 0 : avg,
+        hasAvg: avg != null && !Number.isNaN(avg),
+        rangeStart,
+        rangeEnd,
+        auditsUrl,
+      };
+    }),
   };
 }
 
 /**
- * Power Automate integration point.
- * Replace this stub with a POST to the Power Automate webhook / backend proxy.
+ * Queue avg QA email via Django → Power Automate webhook proxy.
  */
 export async function queueAvgEmail(payload: AvgEmailPayload): Promise<void> {
-  // TODO: POST payload to Power Automate webhook
-  console.info("QA avg email payload (Power Automate pending)", payload);
+  const { triggerPowerAutomate } = await import("./externalApi");
+  await triggerPowerAutomate("avg-email", payload as unknown as Record<string, unknown>);
 }

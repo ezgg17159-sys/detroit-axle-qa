@@ -30,7 +30,7 @@
   border: none;
   border-radius: 10px;
   background: var(--color-accent);
-  color: #fff;
+  color: var(--text-on-accent);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -45,6 +45,83 @@
 .eval-progress__email-btn:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.eval-progress__email-btn--warn {
+  background: #c4781c;
+  color: #fff;
+}
+
+.eval-progress__email-btn--warn:hover:not(:disabled) {
+  background: #a86412;
+}
+
+.eval-progress__reeval-dialog.cases-modal__dialog {
+  width: min(560px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  overflow: hidden;
+}
+
+.eval-progress__reeval-dialog .cases-modal__header {
+  flex-shrink: 0;
+}
+
+.eval-progress__reeval-dialog .eval-progress__reeval-body.cases-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(420px, 55vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.eval-progress__reeval-list {
+  margin: 0;
+  padding: 0 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-navy);
+}
+
+.eval-progress__reeval-footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px 18px;
+  border-top: 1px solid var(--color-border);
+  background: var(--surface-card);
+}
+
+.eval-progress__reeval-secondary {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--surface-card);
+  color: var(--color-navy);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.eval-progress__reeval-secondary:hover:not(:disabled) {
+  border-color: rgba(56, 180, 229, 0.55);
+  background: rgba(56, 180, 229, 0.08);
+}
+
+.eval-progress__reeval-secondary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.eval-progress__day.is-needs-reeval:not(.is-off) {
+  box-shadow: inset 0 0 0 2px rgba(196, 120, 28, 0.85);
+  background: rgba(255, 186, 73, 0.28);
 }
 
 .eval-progress__table-wrap {
@@ -65,22 +142,21 @@
   flex-shrink: 0;
 }
 
-/* 3 panes side-by-side: left + right stay put, only the day grid scrolls horizontally.
-   No sticky overlays = no seam/shadow line over the day cells. */
+/* Single scrollport for X + Y so the scrollbar stays visible and headers stay aligned. */
 .eval-progress__board {
   flex: 1;
   min-height: 0;
   min-width: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .eval-progress__board-inner {
   display: flex;
-  align-items: flex-start;
-  width: 100%;
-  min-width: 0;
+  align-items: stretch;
+  width: max-content;
+  min-width: 100%;
 }
 
 .eval-progress__empty {
@@ -88,6 +164,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
+  min-height: 180px;
   padding: 48px 16px;
   color: var(--text-secondary);
   font-size: 14px;
@@ -95,37 +172,48 @@
 
 .eval-progress__locked {
   flex: 0 0 auto;
+  align-self: flex-start;
   background: var(--surface-card);
-  box-shadow: none;
   border: none;
 }
 
 .eval-progress__locked--left {
-  z-index: 1;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  box-shadow: 1px 0 0 var(--color-border);
+}
+
+.eval-progress__locked--left:has(.eval-progress__dayoff.is-open) {
+  z-index: 25;
+  overflow: visible;
 }
 
 .eval-progress__locked--right {
-  z-index: 1;
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  box-shadow: -1px 0 0 var(--color-border);
 }
 
 .eval-progress__days {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  align-self: flex-start;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
+  overflow: visible;
   box-shadow: none;
 }
 
 .eval-progress__locked-table,
 .eval-progress__days-table,
 .eval-progress__meta-table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   table-layout: fixed;
 }
 
 .eval-progress__locked-table {
-  width: 300px;
+  width: 320px;
 }
 
 .eval-progress__meta-table {
@@ -141,8 +229,10 @@
 .eval-progress__meta-table thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   height: 44px;
+  min-height: 44px;
+  max-height: 44px;
   padding: 0;
   background: #e8f4fa;
   color: var(--color-navy);
@@ -152,8 +242,18 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   text-align: left;
-  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+  border: none;
+  /* inset line so it doesn't change row metrics across panes */
+  box-shadow: inset 0 -1px 0 var(--color-border);
   white-space: nowrap;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.eval-progress__locked--left thead th,
+.eval-progress__locked--right thead th {
+  z-index: 4;
 }
 
 [data-theme="dark"] .eval-progress__locked-table thead th,
@@ -162,30 +262,64 @@
   background: #1a2b44;
 }
 
+[data-theme="dark"] .eval-progress__locked--left {
+  box-shadow: 1px 0 0 var(--color-border);
+}
+
+[data-theme="dark"] .eval-progress__locked--right {
+  box-shadow: -1px 0 0 var(--color-border);
+}
+
 .eval-progress__th {
-  display: block;
-  padding: 12px 10px;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 10px;
+  box-sizing: border-box;
 }
 
 .eval-progress__th--day {
-  padding-left: 0;
-  padding-right: 0;
-  text-align: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0;
+}
+
+.eval-progress__locked-table tbody tr,
+.eval-progress__days-table tbody tr,
+.eval-progress__meta-table tbody tr {
+  height: 52px;
 }
 
 .eval-progress__locked-table tbody td,
 .eval-progress__days-table tbody td,
 .eval-progress__meta-table tbody td {
   height: 52px;
+  min-height: 52px;
+  max-height: 52px;
   padding: 0 10px;
   font-family: var(--font-text);
   font-size: 14px;
+  line-height: 1.2;
   color: var(--color-navy);
-  border-bottom: 1px solid rgba(17, 29, 51, 0.08);
+  border: none;
+  box-shadow: inset 0 -1px 0 var(--color-border);
   background: var(--surface-card);
   white-space: nowrap;
   vertical-align: middle;
   box-sizing: border-box;
+  overflow: hidden;
+}
+
+.eval-progress__days-table tbody td.eval-progress__col-day {
+  padding: 0 4px;
+}
+
+.eval-progress__locked-table tbody td.eval-progress__col-check,
+.eval-progress__locked-table tbody td.eval-progress__col-dayoff,
+.eval-progress__meta-table tbody td.eval-progress__col-avg {
+  padding-left: 0;
+  padding-right: 0;
+  text-align: center;
 }
 
 .eval-progress__locked-table tbody tr:hover td,
@@ -209,14 +343,29 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 100%;
-  min-height: 44px;
+  height: 44px;
+  min-height: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-.eval-progress__col-check .audits-table__checkbox {
-  display: block;
+thead .eval-progress__check-wrap {
+  height: 44px;
+}
+
+tbody .eval-progress__check-wrap {
+  height: 52px;
+}
+
+.eval-progress__col-check .data-table__check {
+  display: grid;
   margin: 0;
   flex-shrink: 0;
+}
+
+.eval-progress__col-check .data-table__check-box {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--color-navy) 35%, transparent);
 }
 
 .eval-progress__col-name {
@@ -225,11 +374,125 @@
   max-width: 180px;
 }
 
+.eval-progress__col-name .eval-progress__th {
+  justify-content: flex-start;
+}
+
 .eval-progress__col-dayoff {
-  width: 72px;
-  min-width: 72px;
-  max-width: 72px;
+  width: 92px;
+  min-width: 92px;
+  max-width: 92px;
   text-align: center;
+  overflow: visible;
+  position: relative;
+  z-index: 1;
+}
+
+.eval-progress__col-dayoff:has(.eval-progress__dayoff.is-open) {
+  z-index: 30;
+}
+
+.eval-progress__col-dayoff .eval-progress__th {
+  justify-content: center;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.eval-progress__dayoff {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  z-index: 1;
+}
+
+.eval-progress__dayoff.is-open {
+  z-index: 40;
+}
+
+.eval-progress__dayoff-trigger {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  width: 76px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--color-navy);
+  font-family: var(--font-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.eval-progress__dayoff-trigger:hover,
+.eval-progress__dayoff-trigger.is-open,
+.eval-progress__dayoff-trigger:focus-visible {
+  border-color: rgba(56, 180, 229, 0.65);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(56, 180, 229, 0.16);
+}
+
+.eval-progress__dayoff-value {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.eval-progress__dayoff-chevron {
+  flex-shrink: 0;
+  color: var(--color-muted);
+  transition: transform 140ms ease;
+}
+
+.eval-progress__dayoff-trigger.is-open .eval-progress__dayoff-chevron {
+  transform: rotate(180deg);
+}
+
+.eval-progress__dayoff-menu {
+  position: fixed;
+  z-index: 10050;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 84px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--surface-menu, var(--surface-card));
+  box-shadow: 0 12px 28px rgba(12, 21, 40, 0.18);
+  box-sizing: border-box;
+}
+
+.eval-progress__dayoff-option {
+  appearance: none;
+  display: block;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-navy);
+  font-family: var(--font-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+
+.eval-progress__dayoff-option:hover {
+  background: rgba(56, 180, 229, 0.12);
+}
+
+.eval-progress__dayoff-option.is-active {
+  background: rgba(226, 232, 240, 0.95);
+  color: #0f172a;
 }
 
 .eval-progress__col-day {
@@ -246,6 +509,10 @@
   min-width: 140px;
 }
 
+.eval-progress__col-latest .eval-progress__th {
+  justify-content: flex-start;
+}
+
 .eval-progress__col-avg {
   width: 72px;
   min-width: 72px;
@@ -255,17 +522,9 @@
 }
 
 .eval-progress__col-avg .eval-progress__th {
-  text-align: center;
+  justify-content: center;
   padding-left: 0;
   padding-right: 0;
-}
-
-.eval-progress__days-table thead th.eval-progress__col-avg {
-  background: #e8f4fa;
-}
-
-[data-theme="dark"] .eval-progress__days-table thead th.eval-progress__col-avg {
-  background: #1a2b44;
 }
 
 .eval-progress__day {
@@ -278,16 +537,29 @@
   padding: 0;
   border: 1px solid transparent;
   border-radius: 8px;
-  background: rgba(17, 29, 51, 0.04);
+  background: var(--surface-subtle);
   color: var(--text-primary);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
+  vertical-align: middle;
+  box-sizing: border-box;
 }
 
 .eval-progress__day:hover {
   border-color: rgba(56, 180, 229, 0.45);
+}
+
+.eval-progress__day.is-locked,
+.eval-progress__day:disabled {
+  cursor: default;
+}
+
+.eval-progress__day.is-locked:hover,
+.eval-progress__day:disabled:hover {
+  border-color: transparent;
 }
 
 .eval-progress__day.is-high {
@@ -306,7 +578,7 @@
 }
 
 .eval-progress__day.is-off {
-  background: rgba(17, 29, 51, 0.08);
+  background: var(--surface-subtle-strong);
   color: var(--color-muted);
   font-size: 10px;
   letter-spacing: 0.04em;

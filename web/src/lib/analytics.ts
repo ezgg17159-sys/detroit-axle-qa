@@ -1,6 +1,7 @@
-import { getStoredAccessToken } from "./api";
+import { apiFetch } from "./api";
 import type { DateRange } from "./dateRange";
 import type { DepartmentDetails, QualityTrend } from "../components/DepartmentDetailModal";
+import { scopedTeamParam } from "./teamScope";
 
 export type AnalyticsKpi = {
   id: string;
@@ -19,18 +20,6 @@ export type AnalyticsPayload = {
   kpis: AnalyticsKpi[];
   departments: AnalyticsDepartment[];
 };
-
-function apiPath(path: string): string {
-  const base = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
-  return `${base}${path}`;
-}
-
-function authHeaders(): HeadersInit {
-  const token = getStoredAccessToken();
-  return {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
 
 function toIso(day: Date): string {
   const y = day.getFullYear();
@@ -52,17 +41,10 @@ export async function fetchAnalyticsOverview(range: DateRange): Promise<Analytic
   const query = new URLSearchParams({
     start: toIso(range.start),
     end: toIso(range.end),
+    team: scopedTeamParam("all"),
   });
 
-  let response: Response;
-  try {
-    response = await fetch(apiPath(`/api/analytics/?${query}`), {
-      headers: authHeaders(),
-    });
-  } catch {
-    throw new Error("Cannot reach the API. Make sure Django is running on port 8000.");
-  }
-
+  const response = await apiFetch(`/api/analytics/?${query}`);
   const data = (await response.json().catch(() => ({}))) as AnalyticsPayload & {
     detail?: string;
   };
@@ -84,7 +66,7 @@ export async function fetchAnalyticsOverview(range: DateRange): Promise<Analytic
   return {
     connected: Boolean(data.connected),
     detail: data.detail,
-    kpis: Array.isArray(data.kpis) ? data.kpis : [],
+    kpis: data.kpis ?? [],
     departments,
   };
 }

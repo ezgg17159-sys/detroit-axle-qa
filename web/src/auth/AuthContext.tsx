@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -9,44 +10,82 @@ import {
 
 import {
   clearSession,
-  getStoredAccessToken,
-  getStoredUser,
+  ensureCsrfToken,
+  fetchMe,
   loginRequest,
-  storeSession,
+  logoutRequest,
+  purgeLegacyTokenStorage,
+  storeUser,
   type AuthUser,
 } from "../lib/api";
 
 type AuthContextValue = {
   user: AuthUser | null;
   isAuthenticated: boolean;
+  bootstrapping: boolean;
   login: (login: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => getStoredUser());
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [bootstrapping, setBootstrapping] = useState(true);
+
+  useEffect(() => {
+    purgeLegacyTokenStorage();
+    let cancelled = false;
+    void (async () => {
+      try {
+        await ensureCsrfToken();
+        const me = await fetchMe();
+        if (!cancelled) {
+          storeUser(me);
+          setUser(me);
+        }
+      } catch {
+        if (!cancelled) {
+          clearSession();
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) setBootstrapping(false);
+      }
+    })();
+
+    const onExpired = () => {
+      clearSession();
+      setUser(null);
+    };
+    window.addEventListener("daq:auth-expired", onExpired);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("daq:auth-expired", onExpired);
+    };
+  }, []);
 
   const login = useCallback(async (loginValue: string, password: string) => {
     const payload = await loginRequest(loginValue, password);
-    storeSession(payload);
+    storeUser(payload.user);
     setUser(payload.user);
   }, []);
 
-  const logout = useCallback(() => {
-    clearSession();
+  const logout = useCallback(async () => {
+    await logoutRequest();
     setUser(null);
   }, []);
 
   const value = useMemo(
     () => ({
       user,
-      isAuthenticated: Boolean(user && getStoredAccessToken()),
+      isAuthenticated: Boolean(user),
+      bootstrapping,
       login,
       logout,
     }),
-    [user, login, logout],
+    [user, bootstrapping, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

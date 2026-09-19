@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title>QA Monitoring</title>
+    <!--[if mso]>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:AllowPNG/>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+    <![endif]-->
+  </head>
+  <body style="margin:0 !important;padding:0 !important;width:100% !important;background:#111d33;">
+    <center style="width:100%;background:#111d33;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" align="center" style="width:100% !important;max-width:100% !important;border-collapse:collapse;background:#111d33;mso-table-lspace:0pt;mso-table-rspace:0pt;">
+        <tr>
+          <td
+            align="center"
+            valign="middle"
+            width="100%"
+            bgcolor="#111d33"
+            background="https://detroitaxle-my.sharepoint.com/personal/ralagha_detroitaxle_com/_layouts/15/download.aspx?share=IQB5WNg7j98_Rocyquf1XIuyAZLB-66gHSxx85Vt6BSAtXc"
+            style="
+              width:100% !important;
+              min-width:100% !important;
+              background-color:#111d33;
+              background-image:url('https://detroitaxle-my.sharepoint.com/personal/ralagha_detroitaxle_com/_layouts/15/download.aspx?share=IQB5WNg7j98_Rocyquf1XIuyAZLB-66gHSxx85Vt6BSAtXc');
+              background-size:cover !important;
+              background-position:center center;
+              background-repeat:no-repeat;
+              text-align:center;
+              padding:16px 20px 56px;
+            "
+          >
+            <!--[if gte mso 9]>
+            <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:1200px;height:700px;">
+              <v:fill type="frame" src="https://detroitaxle-my.sharepoint.com/personal/ralagha_detroitaxle_com/_layouts/15/download.aspx?share=IQB5WNg7j98_Rocyquf1XIuyAZLB-66gHSxx85Vt6BSAtXc" color="#111d33" />
+              <v:textbox inset="0,0,0,0" style="mso-fit-shape-to-text:true;">
+            <![endif]-->
+
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" align="center" style="width:100%;border-collapse:collapse;margin:0 auto;">
+              <tr>
+                <td align="right" style="padding:0 8px 12px;text-align:right;font-family:Segoe UI,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.4;">
+                  <a
+                    href="@{coalesce(triggerBody()?['monitoringUrl'], triggerBody()?['payload']?['monitoringUrl'])}"
+                    style="color:#ffffff;text-decoration:underline;font-weight:600;"
+                  >View monitoring</a>
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding:0 0 28px;text-align:center;">
+                  <img
+                    src="https://detroitaxle-my.sharepoint.com/personal/ralagha_detroitaxle_com/_layouts/15/download.aspx?share=IQCt96sppXKcSb8KnCuFujilAeUj8NrQsvUyEqLEVttvgTo"
+                    width="280"
+                    alt="Detroit Axle"
+                    style="display:block;margin:0 auto;width:280px;max-width:72%;height:auto;border:0;"
+                  />
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="text-align:center;font-family:Segoe UI,Arial,Helvetica,sans-serif;font-size:13px;letter-spacing:0.22em;text-transform:uppercase;color:#ffffff;">
+                  Monitoring note
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding-top:14px;text-align:center;font-family:Segoe UI,Arial,Helvetica,sans-serif;font-size:28px;font-weight:700;line-height:1.2;color:#ffffff;">
+                  @{coalesce(triggerBody()?['agentName'], triggerBody()?['payload']?['agentName'])}
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding-top:10px;text-align:center;font-family:Segoe UI,Arial,Helvetica,sans-serif;font-size:15px;color:#ffffff;">
+                  Order @{coalesce(triggerBody()?['order'], triggerBody()?['payload']?['order'])} · @{coalesce(triggerBody()?['teamLabel'], triggerBody()?['payload']?['teamLabel'])}
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding-top:12px;text-align:center;font-family:Segoe UI,Arial,Helvetica,sans-serif;font-size:13px;color:#cfe8f5;">
+                  Logged @{coalesce(triggerBody()?['createdAtLabel'], triggerBody()?['payload']?['createdAtLabel'])}
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding:22px 24px 0;text-align:center;font-family:Segoe UI,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#ffffff;">
+                  Please review this note in the QA portal and follow up with your QA lead if needed.
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding-top:36px;text-align:center;font-family:Segoe UI,Arial,Helvetica,sans-serif;font-size:11px;color:#cfe8f5;">
+                  Detroit Axle · Quality Assurance
+                </td>
+              </tr>
+            </table>
+
+            <!--[if gte mso 9]>
+              </v:textbox>
+            </v:rect>
+            <![endif]-->
+          </td>
+        </tr>
+      </table>
+    </center>
+  </body>
+</html>

@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DateRangePicker } from "../components/DateRangePicker";
 import { PerformanceTrendChart } from "../components/PerformanceTrendChart";
-import { defaultAnalyticsRange, type DateRange } from "../lib/dateRange";
+import { useShellPageLoading } from "../components/PageLoadingContext";
+import { useScopedTeamFilter } from "../hooks/useScopedTeamFilter";
+import { defaultAnalyticsRange, toIsoDate, type DateRange } from "../lib/dateRange";
+import { matchesAgentSearch } from "../lib/audits";
+import { fetchAgents, fetchReports, fetchReportsExport, type ReportsKpi } from "../lib/externalApi";
+import { downloadQaReportWorkbook } from "../lib/qaReportExport";
 import { useNotify } from "../notifications/NotificationContext";
 
 type TeamFilter = "all" | "calls" | "tickets" | "live-chat" | "sales";
@@ -11,6 +16,7 @@ type AgentOption = {
   id: string;
   name: string;
   alias: string;
+  agentName?: string;
   team: Exclude<TeamFilter, "all">;
 };
 
@@ -28,7 +34,7 @@ const teamOptions: Array<{ id: TeamFilter; label: string }> = [
   { id: "sales", label: "Sales" },
 ];
 
-const allKpis: KpiCard[] = [
+const EMPTY_KPIS: KpiCard[] = [
   { id: "total-audits", label: "Total Audits", value: "—" },
   { id: "calls", label: "Calls Avg", value: "—" },
   { id: "tickets", label: "Tickets Avg", value: "—" },
@@ -38,6 +44,16 @@ const allKpis: KpiCard[] = [
 
 function teamLabel(team: TeamFilter): string {
   return teamOptions.find((option) => option.id === team)?.label ?? "All teams";
+}
+
+function mergeKpis(live: ReportsKpi[]): KpiCard[] {
+  const byId = new Map(live.map((row) => [row.id, row]));
+  return EMPTY_KPIS.map((fallback) => {
+    const row = byId.get(fallback.id);
+    return row
+      ? { ...fallback, label: row.label || fallback.label, value: row.value }
+      : fallback;
+  });
 }
 
 function AgentSearch({
@@ -61,13 +77,8 @@ function AgentSearch({
   );
 
   const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return pool.filter(
-      (agent) =>
-        agent.name.toLowerCase().includes(q) ||
-        agent.alias.toLowerCase().includes(q),
-    );
+    if (!query.trim()) return [];
+    return pool.filter((agent) => matchesAgentSearch(agent, query));
   }, [pool, query]);
 
   const emptyMessage = !query.trim()
@@ -170,7 +181,9 @@ function AgentSearch({
                   <span className="reports-search__option-text">
                     <span className="reports-search__option-name">{agent.name}</span>
                     <span className="reports-search__option-meta">
-                      {agent.alias} · {teamLabel(agent.team)}
+                      {[agent.agentName, agent.alias, teamLabel(agent.team)]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   </span>
                 </label>
@@ -277,25 +290,116 @@ export function ReportsPage() {
   const { notify } = useNotify();
   const [range, setRange] = useState<DateRange>(() => defaultAnalyticsRange());
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
-  const [team, setTeam] = useState<TeamFilter>("all");
+  const [team, setTeam, teamScope] = useScopedTeamFilter("all");
+  const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [kpis, setKpis] = useState<KpiCard[]>(EMPTY_KPIS);
+  const [trendPoints, setTrendPoints] = useState<number[]>([]);
+  const [trendLabels, setTrendLabels] = useState<string[]>([]);
+  const [loadDetail, setLoadDetail] = useState("");
+  const [loading, setLoading] = useState(true);
+  useShellPageLoading(loading);
 
-  // Populated from API when agent search is wired
-  const agents = useMemo<AgentOption[]>(() => [], []);
+  useEffect(() => {
+    void fetchAgents({ team: team === "all" ? "all" : team })
+      .then((payload) => {
+        if (!payload.connected) return;
+        setAgents(
+          payload.agents.map((agent) => ({
+            id: agent.id,
+            name: agent.name,
+            alias: agent.alias,
+            agentName: agent.agentName || "",
+            team: (agent.team === "tickets" ||
+            agent.team === "live-chat" ||
+            agent.team === "sales"
+              ? agent.team
+              : "calls") as Exclude<TeamFilter, "all">,
+          })),
+        );
+      })
+      .catch(() => {
+        /* keep empty agent list */
+      });
+  }, [team]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void fetchReports({
+      start: toIsoDate(range.start) || undefined,
+      end: toIsoDate(range.end) || undefined,
+      team,
+      agentIds: selectedAgentIds,
+    })
+      .then((payload) => {
+        if (cancelled) return;
+        setKpis(mergeKpis(payload.kpis));
+        setTrendPoints(payload.trendPoints);
+        setTrendLabels(payload.trendLabels);
+        setLoadDetail(
+          payload.connected ? "" : payload.detail || "External database disconnected.",
+        );
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setKpis(EMPTY_KPIS);
+        setTrendPoints([]);
+        setTrendLabels([]);
+        setLoadDetail(error instanceof Error ? error.message : "Unable to load reports.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [range.start, range.end, team, selectedAgentIds]);
 
   const visibleKpis = useMemo(() => {
-    if (team === "all") return allKpis;
-    return allKpis.filter((card) => card.id === "total-audits" || card.id === team);
-  }, [team]);
+    if (team === "all") return kpis;
+    return kpis.filter((card) => card.id === "total-audits" || card.id === team);
+  }, [team, kpis]);
 
   const selectedAgents = useMemo(
     () => agents.filter((agent) => selectedAgentIds.includes(agent.id)),
     [agents, selectedAgentIds],
   );
 
-  const trendTitle =
-    team === "all" ? "Performance trend" : `${teamLabel(team)} performance trend`;
+  const trendTitle = useMemo(() => {
+    if (selectedAgents.length === 1) {
+      const agent = selectedAgents[0];
+      return `${agent.name} performance trend`;
+    }
+    if (selectedAgents.length > 1) {
+      return `Selected agents performance trend`;
+    }
+    if (team !== "all") {
+      return `${teamLabel(team)} performance trend`;
+    }
+    return "Performance trend";
+  }, [selectedAgents, team]);
+
+  const trendMeta = useMemo(() => {
+    if (selectedAgents.length === 1) {
+      const agent = selectedAgents[0];
+      const bits = [agent.agentName || agent.alias, teamLabel(agent.team)].filter(Boolean);
+      return bits.join(" · ");
+    }
+    if (selectedAgents.length > 1) {
+      const names = selectedAgents
+        .slice(0, 3)
+        .map((agent) => agent.name)
+        .join(", ");
+      const extra =
+        selectedAgents.length > 3 ? ` +${selectedAgents.length - 3} more` : "";
+      return `${names}${extra}`;
+    }
+    if (team === "all") return "All teams in selected range";
+    return `Showing ${teamLabel(team)} only`;
+  }, [selectedAgents, team]);
 
   const handleTeamChange = (next: TeamFilter) => {
+    if (teamScope.locked) return;
     setTeam(next);
     if (next === "all") return;
     setSelectedAgentIds((current) =>
@@ -303,35 +407,33 @@ export function ReportsPage() {
     );
   };
 
-  const handleExport = () => {
-    // Template will be provided later — export scope already follows active filters.
-    const teamsIncluded =
-      team === "all" ? (["calls", "tickets", "live-chat", "sales"] as const) : ([team] as const);
-    void {
-      range,
-      team,
-      teamsIncluded,
-      agentIds: selectedAgentIds,
-      agents: selectedAgents.map((agent) => ({
-        id: agent.id,
-        name: agent.name,
-        alias: agent.alias,
-        team: agent.team,
-      })),
-      kpis: visibleKpis.map((card) => card.id),
-    };
+  const [exporting, setExporting] = useState(false);
 
-    const agentNote =
-      selectedAgentIds.length === 0
-        ? "all agents"
-        : `${selectedAgentIds.length} selected agent${selectedAgentIds.length === 1 ? "" : "s"}`;
-
-    notify(
-      team === "all"
-        ? `Export will include ${agentNote} across all teams (template pending).`
-        : `Export will include ${agentNote} for ${teamLabel(team)} only (template pending).`,
-      { variant: "info" },
-    );
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const payload = await fetchReportsExport({
+        start: toIsoDate(range.start) || undefined,
+        end: toIsoDate(range.end) || undefined,
+        team,
+        agentIds: selectedAgentIds,
+      });
+      if (!payload.connected) {
+        notify(payload.detail || "External database disconnected. Export unavailable.", {
+          variant: "error",
+        });
+        return;
+      }
+      await downloadQaReportWorkbook(payload);
+      notify("Report exported.", { variant: "success" });
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Unable to export report.", {
+        variant: "error",
+      });
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -346,45 +448,35 @@ export function ReportsPage() {
           />
 
           <FilterSelect
-            label="Filter by team"
+            label={teamScope.locked ? "Team" : "Filter by team"}
             value={team}
-            options={teamOptions}
+            options={
+              teamScope.locked && teamScope.scope
+                ? teamOptions.filter((option) => option.id === teamScope.scope)
+                : teamOptions
+            }
             onChange={handleTeamChange}
           />
-
-          <div className="reports-export">
-            <span className="reports-export__label" aria-hidden="true">
-              Export
-            </span>
-            <button type="button" className="reports-export__btn" onClick={handleExport}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  d="M12 3v12"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M7 10l5 5 5-5"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M4 19h16"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
-              Export
-            </button>
-          </div>
         </div>
 
-        <DateRangePicker value={range} onChange={setRange} />
+        <div className="reports-toolbar-right">
+          <DateRangePicker value={range} onChange={setRange} />
+          <button
+            type="button"
+            className="cases-add-btn"
+            onClick={() => void handleExport()}
+            disabled={exporting}
+          >
+            {exporting ? "Exporting…" : "Export"}
+          </button>
+        </div>
       </div>
+
+      {loadDetail ? (
+        <p className="audits-page__hint" role="status">
+          {loadDetail}
+        </p>
+      ) : null}
 
       <section
         className={`reports-kpi-grid reports-kpi-grid--${visibleKpis.length}`}
@@ -401,20 +493,19 @@ export function ReportsPage() {
       <section className="reports-trend" aria-label={trendTitle}>
         <div className="reports-trend__header">
           <h2 className="reports-trend__title">{trendTitle}</h2>
-          <p className="reports-trend__meta">
-            {selectedAgentIds.length > 0
-              ? `${selectedAgentIds.length} agent${selectedAgentIds.length === 1 ? "" : "s"} selected`
-              : team === "all"
-                ? "All teams in selected range"
-                : `Showing ${teamLabel(team)} only`}
-          </p>
+          <p className="reports-trend__meta">{trendMeta}</p>
         </div>
         <div className="reports-trend__chart">
           <PerformanceTrendChart
+            key={`${team}|${selectedAgentIds.join(",")}|${toIsoDate(range.start)}|${toIsoDate(range.end)}|${trendPoints.join(",")}`}
+            points={trendPoints}
+            labels={trendLabels}
             emptyMessage={
-              team === "all"
-                ? "No performance data for this range"
-                : `No ${teamLabel(team).toLowerCase()} performance data for this range`
+              selectedAgentIds.length > 0
+                ? "No performance data for the selected agents in this range"
+                : team === "all"
+                  ? "No performance data for this range"
+                  : `No ${teamLabel(team).toLowerCase()} performance data for this range`
             }
           />
         </div>

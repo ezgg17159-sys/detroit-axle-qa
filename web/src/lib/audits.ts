@@ -22,12 +22,15 @@ export type AuditRecord = {
   score: string;
   shared: boolean;
   evaluate: "pending" | "done";
+  /** Checked on audit details — marks the audit as re-evaluated. */
+  reevaluated?: boolean;
   caseType: CaseType;
   status: string;
   ticketNumber: string;
   orderNumber: string;
   phoneNumber: string;
   comments: string;
+  otherInformation: string;
   createdBy: string;
   qualityScore: string;
   issueResolved: "yes" | "no" | "";
@@ -47,9 +50,25 @@ export type AuditAgent = {
   id: string;
   name: string;
   alias: string;
+  /** Legal / profile agent_name when different from display name */
+  agentName?: string;
   team: AuditTeam;
   lastInternalAudit: string;
+  /** Whole-number quality score from the last audit, e.g. "91" */
+  lastInternalAuditScore?: string;
 };
+
+/** Match agent search against name, alias, id, and legal name. */
+export function matchesAgentSearch(
+  agent: Pick<AuditAgent, "id" | "name" | "alias"> & { agentName?: string },
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [agent.name, agent.alias, agent.id, agent.agentName]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase().includes(q));
+}
 
 /** Populated from API when agents are wired */
 export function listAgents(): AuditAgent[] {
@@ -66,8 +85,17 @@ export const RESULT_OPTIONS: Array<{ id: EvalResult; label: string }> = [
   { id: "fail", label: "Fail" },
 ];
 
-/** Populated from API when QA metrics are wired */
-export const DEFAULT_QA_METRICS: Array<{ id: string; metric: string }> = [];
+/** Default QA metrics (aligned with Team Heatmap columns) */
+export const DEFAULT_QA_METRICS: Array<{ id: string; metric: string }> = [
+  { id: "procedure", metric: "Procedure" },
+  { id: "a-form", metric: "A-form" },
+  { id: "accuracy", metric: "Accuracy" },
+  { id: "call-managing", metric: "Call managing" },
+  { id: "creating-ref-order", metric: "Creating ref order" },
+  { id: "ending", metric: "Ending" },
+  { id: "friendliness", metric: "Friendliness" },
+  { id: "greeting", metric: "Greeting" },
+];
 
 export function teamLabel(team: AuditTeam | "all" | ""): string {
   if (!team || team === "all") return "All teams";
@@ -81,6 +109,16 @@ export function caseTypeLabel(caseType: CaseType | "all" | ""): string {
 
 export function resultLabel(result: EvalResult): string {
   return RESULT_OPTIONS.find((option) => option.id === result)?.label ?? result;
+}
+
+export function formatEarned(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  const text = String(value).trim();
+  if (!text || text === "—") return "—";
+  const number = Number(text);
+  if (!Number.isFinite(number)) return text;
+  if (Math.abs(number - Math.round(number)) < 1e-9) return String(Math.round(number));
+  return number.toFixed(2).replace(/\.?0+$/, "");
 }
 
 export function earnedForResult(result: EvalResult): string {
@@ -98,6 +136,23 @@ export function createEmptyMetrics(): QaMetricRow[] {
     earned: "—",
     qaNote: "",
   }));
+}
+
+/** Dedicated Yes/No UI handles this — keep it out of the metrics table. */
+export function isIssueResolvedMetric(row: { id?: string; metric?: string; label?: string; name?: string }): boolean {
+  const text = `${row.id || ""} ${row.metric || ""} ${row.label || ""} ${row.name || ""}`.toLowerCase();
+  return (
+    text.includes("issue was resolved") ||
+    text.includes("issue_resolved") ||
+    text.includes("issue-resolved") ||
+    text.includes("issue_was_resolved")
+  );
+}
+
+export function withoutIssueResolvedMetrics<T extends { id?: string; metric?: string; label?: string; name?: string }>(
+  rows: T[],
+): T[] {
+  return rows.filter((row) => !isIssueResolvedMetric(row));
 }
 
 export function computeQualityScore(metrics: QaMetricRow[]): string {
@@ -119,7 +174,11 @@ function readStore(): AuditRecord[] {
     const raw = sessionStorage.getItem(storageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as AuditRecord[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((row) => ({
+      ...row,
+      otherInformation: row.otherInformation ?? "",
+    }));
   } catch {
     return [];
   }
@@ -146,12 +205,19 @@ export function getAudit(id: string): AuditRecord | null {
   return listAudits().find((row) => row.id === id) ?? null;
 }
 
-export function saveAudit(audit: AuditRecord): void {
+/** Saves audit. Returns the previous record when updating, otherwise null. */
+export function saveAudit(audit: AuditRecord): AuditRecord | null {
   const rows = readStore();
   const index = rows.findIndex((row) => row.id === audit.id);
-  if (index >= 0) rows[index] = audit;
-  else rows.unshift(audit);
+  if (index >= 0) {
+    const previous = rows[index]!;
+    rows[index] = audit;
+    writeStore(rows);
+    return previous;
+  }
+  rows.unshift(audit);
   writeStore(rows);
+  return null;
 }
 
 export function deleteAudit(id: string): void {

@@ -48,64 +48,134 @@ def _vs_prev(current: float | None, previous: float | None) -> str:
     return f"{sign}{round(delta)}"
 
 
-def fetch_analytics(start: date, end: date) -> dict[str, Any]:
+def fetch_analytics(start: date, end: date, team: str = "all") -> dict[str, Any]:
     schema = schema_name()
     span_days = (end - start).days + 1
     prev_end = start - timedelta(days=1)
     prev_start = prev_end - timedelta(days=span_days - 1)
+    team_key = (team or "all").strip().lower()
+    scoped_depts = (
+        [dept for dept in DEPARTMENTS if dept["id"] == team_key]
+        if team_key in SLUG_TO_DB_TEAM
+        else list(DEPARTMENTS)
+    )
+    if not scoped_depts:
+        scoped_depts = list(DEPARTMENTS)
 
     with external_connection() as conn:
         with conn.cursor() as cur:
-            # KPI totals
-            cur.execute(
-                f"""
-                SELECT
-                  COUNT(*)::int AS total_audits,
-                  ROUND(AVG(quality_score)::numeric, 1) AS avg_quality,
-                  COUNT(*) FILTER (WHERE shared_with_agent IS TRUE)::int AS released
-                FROM {schema}.audits
-                WHERE audit_date::date >= %s AND audit_date::date <= %s
-                """,
-                (start, end),
-            )
+            # KPI totals (optionally locked to one team)
+            if team_key in SLUG_TO_DB_TEAM:
+                db_team = SLUG_TO_DB_TEAM[team_key]
+                cur.execute(
+                    f"""
+                    SELECT
+                      COUNT(*)::int AS total_audits,
+                      ROUND(AVG(quality_score)::numeric, 1) AS avg_quality,
+                      COUNT(*) FILTER (WHERE shared_with_agent IS TRUE)::int AS released
+                    FROM {schema}.audits
+                    WHERE audit_date::date >= %s AND audit_date::date <= %s
+                      AND LOWER(COALESCE(team, '')) = LOWER(%s)
+                    """,
+                    (start, end, db_team),
+                )
+            else:
+                cur.execute(
+                    f"""
+                    SELECT
+                      COUNT(*)::int AS total_audits,
+                      ROUND(AVG(quality_score)::numeric, 1) AS avg_quality,
+                      COUNT(*) FILTER (WHERE shared_with_agent IS TRUE)::int AS released
+                    FROM {schema}.audits
+                    WHERE audit_date::date >= %s AND audit_date::date <= %s
+                    """,
+                    (start, end),
+                )
             totals = cur.fetchone() or {}
 
-            cur.execute(
-                f"""
-                SELECT COALESCE(SUM(calls_count), 0)::int AS volume
-                FROM {schema}.calls_records
-                WHERE call_date >= %s AND call_date <= %s
-                """,
-                (start, end),
-            )
-            calls_vol = (cur.fetchone() or {}).get("volume") or 0
+            def _safe_volume(sql: str, params: tuple[Any, ...]) -> float | int | None:
+                try:
+                    cur.execute(sql, params)
+                    row = cur.fetchone() or {}
+                    return row.get("volume") if "volume" in row else row.get("revenue")
+                except Exception:
+                    conn.rollback()
+                    return None
 
-            cur.execute(
-                f"""
-                SELECT COALESCE(SUM(tickets_count), 0)::int AS volume
-                FROM {schema}.tickets_records
-                WHERE ticket_date >= %s AND ticket_date <= %s
-                """,
-                (start, end),
-            )
-            tickets_vol = (cur.fetchone() or {}).get("volume") or 0
+            calls_vol = None
+            tickets_vol = None
+            sales_rev = None
 
-            cur.execute(
-                f"""
-                SELECT COALESCE(SUM(amount), 0)::numeric AS revenue
-                FROM {schema}.sales_records
-                WHERE sale_date >= %s AND sale_date <= %s
-                """,
-                (start, end),
-            )
-            sales_rev = (cur.fetchone() or {}).get("revenue")
+            if team_key in ("all", "calls"):
+                calls_vol = _safe_volume(
+                    f"""
+                    SELECT COALESCE(SUM(calls_count), 0)::int AS volume
+                    FROM {schema}.calls_records
+                    WHERE call_date >= %s AND call_date <= %s
+                    """,
+                    (start, end),
+                )
+                if calls_vol is None:
+                    cur.execute(
+                        f"""
+                        SELECT COUNT(*)::int AS volume
+                        FROM {schema}.audits
+                        WHERE LOWER(COALESCE(team, '')) = LOWER(%s)
+                          AND audit_date::date >= %s AND audit_date::date <= %s
+                        """,
+                        ("Calls", start, end),
+                    )
+                    calls_vol = (cur.fetchone() or {}).get("volume") or 0
+
+            if team_key in ("all", "tickets"):
+                tickets_vol = _safe_volume(
+                    f"""
+                    SELECT COALESCE(SUM(tickets_count), 0)::int AS volume
+                    FROM {schema}.tickets_records
+                    WHERE ticket_date >= %s AND ticket_date <= %s
+                    """,
+                    (start, end),
+                )
+                if tickets_vol is None:
+                    cur.execute(
+                        f"""
+                        SELECT COUNT(*)::int AS volume
+                        FROM {schema}.audits
+                        WHERE LOWER(COALESCE(team, '')) = LOWER(%s)
+                          AND audit_date::date >= %s AND audit_date::date <= %s
+                        """,
+                        ("Tickets", start, end),
+                    )
+                    tickets_vol = (cur.fetchone() or {}).get("volume") or 0
+
+            if team_key in ("all", "sales"):
+                sales_rev = _safe_volume(
+                    f"""
+                    SELECT COALESCE(SUM(amount), 0)::numeric AS revenue
+                    FROM {schema}.sales_records
+                    WHERE sale_date >= %s AND sale_date <= %s
+                    """,
+                    (start, end),
+                )
+                if sales_rev is None:
+                    cur.execute(
+                        f"""
+                        SELECT COUNT(*)::int AS revenue
+                        FROM {schema}.audits
+                        WHERE LOWER(COALESCE(team, '')) = LOWER(%s)
+                          AND audit_date::date >= %s AND audit_date::date <= %s
+                        """,
+                        ("Sales", start, end),
+                    )
+                    sales_rev = (cur.fetchone() or {}).get("revenue")
 
             departments: list[dict[str, Any]] = []
-            for dept in DEPARTMENTS:
+            for dept in scoped_depts:
                 db_team = SLUG_TO_DB_TEAM[dept["id"]]
                 departments.append(
                     _department_block(
                         cur,
+                        conn=conn,
                         schema=schema,
                         dept_id=dept["id"],
                         title=dept["title"],
@@ -117,32 +187,45 @@ def fetch_analytics(start: date, end: date) -> dict[str, Any]:
                     )
                 )
 
-    return {
-        "connected": True,
-        "range": {"start": start.isoformat(), "end": end.isoformat()},
-        "kpis": [
-            {"id": "total-audits", "label": "Total Audits", "value": _fmt_num(totals.get("total_audits"))},
-            {
-                "id": "avg-quality",
-                "label": "Avg Quality",
-                "value": "—" if totals.get("avg_quality") is None else f"{_fmt_pct(totals.get('avg_quality'))}%",
-            },
-            {"id": "released", "label": "Released", "value": _fmt_num(totals.get("released"))},
-            {"id": "calls-volume", "label": "Calls Volume", "value": _fmt_num(calls_vol)},
-            {"id": "tickets-volume", "label": "Tickets Volume", "value": _fmt_num(tickets_vol)},
+    kpis: list[dict[str, str]] = [
+        {"id": "total-audits", "label": "Total Audits", "value": _fmt_num(totals.get("total_audits"))},
+        {
+            "id": "avg-quality",
+            "label": "Avg Quality",
+            "value": "—" if totals.get("avg_quality") is None else f"{_fmt_pct(totals.get('avg_quality'))}%",
+        },
+        {"id": "released", "label": "Released", "value": _fmt_num(totals.get("released"))},
+    ]
+    if team_key in ("all", "calls"):
+        kpis.append({"id": "calls-volume", "label": "Calls Volume", "value": _fmt_num(calls_vol)})
+    if team_key in ("all", "tickets"):
+        kpis.append({"id": "tickets-volume", "label": "Tickets Volume", "value": _fmt_num(tickets_vol)})
+    if team_key in ("all", "live-chat"):
+        # Live chat has no dedicated volume KPI today; keep parity by omitting extras.
+        pass
+    if team_key in ("all", "sales"):
+        kpis.append(
             {
                 "id": "sales-revenue",
                 "label": "Sales Revenue",
                 "value": "—" if sales_rev is None else f"${_fmt_num(float(sales_rev), digits=0)}",
-            },
-        ],
+            }
+        )
+
+    return {
+        "connected": True,
+        "range": {"start": start.isoformat(), "end": end.isoformat()},
+        "team": team_key,
+        "kpis": kpis,
         "departments": departments,
     }
+
 
 
 def _department_block(
     cur,
     *,
+    conn,
     schema: str,
     dept_id: str,
     title: str,
@@ -192,69 +275,7 @@ def _department_block(
     )
     previous = cur.fetchone() or {}
 
-    # Volume by channel
-    volume = 0
-    prev_volume = 0
-    if dept_id == "calls":
-        cur.execute(
-            f"""
-            SELECT COALESCE(SUM(calls_count), 0)::int AS volume
-            FROM {schema}.calls_records
-            WHERE call_date >= %s AND call_date <= %s
-            """,
-            (start, end),
-        )
-        volume = (cur.fetchone() or {}).get("volume") or 0
-        cur.execute(
-            f"""
-            SELECT COALESCE(SUM(calls_count), 0)::int AS volume
-            FROM {schema}.calls_records
-            WHERE call_date >= %s AND call_date <= %s
-            """,
-            (prev_start, prev_end),
-        )
-        prev_volume = (cur.fetchone() or {}).get("volume") or 0
-    elif dept_id == "tickets":
-        cur.execute(
-            f"""
-            SELECT COALESCE(SUM(tickets_count), 0)::int AS volume
-            FROM {schema}.tickets_records
-            WHERE ticket_date >= %s AND ticket_date <= %s
-            """,
-            (start, end),
-        )
-        volume = (cur.fetchone() or {}).get("volume") or 0
-        cur.execute(
-            f"""
-            SELECT COALESCE(SUM(tickets_count), 0)::int AS volume
-            FROM {schema}.tickets_records
-            WHERE ticket_date >= %s AND ticket_date <= %s
-            """,
-            (prev_start, prev_end),
-        )
-        prev_volume = (cur.fetchone() or {}).get("volume") or 0
-    elif dept_id == "sales":
-        cur.execute(
-            f"""
-            SELECT COALESCE(SUM(amount), 0)::numeric AS volume
-            FROM {schema}.sales_records
-            WHERE sale_date >= %s AND sale_date <= %s
-            """,
-            (start, end),
-        )
-        volume = float((cur.fetchone() or {}).get("volume") or 0)
-        cur.execute(
-            f"""
-            SELECT COALESCE(SUM(amount), 0)::numeric AS volume
-            FROM {schema}.sales_records
-            WHERE sale_date >= %s AND sale_date <= %s
-            """,
-            (prev_start, prev_end),
-        )
-        prev_volume = float((cur.fetchone() or {}).get("volume") or 0)
-    else:
-        # Live chat: use audit count as activity proxy
-        volume = current.get("audits") or 0
+    def _audit_volume(day_start: date, day_end: date) -> int:
         cur.execute(
             f"""
             SELECT COUNT(*)::int AS volume
@@ -262,9 +283,86 @@ def _department_block(
             WHERE LOWER(COALESCE(team, '')) = LOWER(%s)
               AND audit_date::date >= %s AND audit_date::date <= %s
             """,
-            (db_team, prev_start, prev_end),
+            (db_team, day_start, day_end),
         )
-        prev_volume = (cur.fetchone() or {}).get("volume") or 0
+        return (cur.fetchone() or {}).get("volume") or 0
+
+    def _try_volume(sql: str, params: tuple[Any, ...]) -> float | int | None:
+        try:
+            cur.execute(sql, params)
+            return (cur.fetchone() or {}).get("volume")
+        except Exception:
+            conn.rollback()
+            return None
+
+    volume: float | int = 0
+    prev_volume: float | int = 0
+    if dept_id == "calls":
+        volume = _try_volume(
+            f"""
+            SELECT COALESCE(SUM(calls_count), 0)::int AS volume
+            FROM {schema}.calls_records
+            WHERE call_date >= %s AND call_date <= %s
+            """,
+            (start, end),
+        )
+        prev_volume = _try_volume(
+            f"""
+            SELECT COALESCE(SUM(calls_count), 0)::int AS volume
+            FROM {schema}.calls_records
+            WHERE call_date >= %s AND call_date <= %s
+            """,
+            (prev_start, prev_end),
+        )
+        if volume is None:
+            volume = _audit_volume(start, end)
+        if prev_volume is None:
+            prev_volume = _audit_volume(prev_start, prev_end)
+    elif dept_id == "tickets":
+        volume = _try_volume(
+            f"""
+            SELECT COALESCE(SUM(tickets_count), 0)::int AS volume
+            FROM {schema}.tickets_records
+            WHERE ticket_date >= %s AND ticket_date <= %s
+            """,
+            (start, end),
+        )
+        prev_volume = _try_volume(
+            f"""
+            SELECT COALESCE(SUM(tickets_count), 0)::int AS volume
+            FROM {schema}.tickets_records
+            WHERE ticket_date >= %s AND ticket_date <= %s
+            """,
+            (prev_start, prev_end),
+        )
+        if volume is None:
+            volume = _audit_volume(start, end)
+        if prev_volume is None:
+            prev_volume = _audit_volume(prev_start, prev_end)
+    elif dept_id == "sales":
+        volume = _try_volume(
+            f"""
+            SELECT COALESCE(SUM(amount), 0)::numeric AS volume
+            FROM {schema}.sales_records
+            WHERE sale_date >= %s AND sale_date <= %s
+            """,
+            (start, end),
+        )
+        prev_volume = _try_volume(
+            f"""
+            SELECT COALESCE(SUM(amount), 0)::numeric AS volume
+            FROM {schema}.sales_records
+            WHERE sale_date >= %s AND sale_date <= %s
+            """,
+            (prev_start, prev_end),
+        )
+        if volume is None:
+            volume = _audit_volume(start, end)
+        if prev_volume is None:
+            prev_volume = _audit_volume(prev_start, prev_end)
+    else:
+        volume = current.get("audits") or 0
+        prev_volume = _audit_volume(prev_start, prev_end)
 
     cur.execute(
         f"""
@@ -272,8 +370,23 @@ def _department_block(
           COALESCE(NULLIF(p.display_name, ''), NULLIF(a.agent_name, ''), a.agent_id) AS name,
           ROUND(AVG(a.quality_score)::numeric, 1) AS avg_quality
         FROM {schema}.audits a
-        LEFT JOIN {schema}.profiles p
-          ON p.agent_id = a.agent_id AND p.role = 'agent'
+        LEFT JOIN LATERAL (
+          SELECT p.display_name
+          FROM {schema}.profiles p
+          WHERE COALESCE(p.agent_id, '') = COALESCE(a.agent_id, '')
+            AND a.agent_id IS NOT NULL
+            AND a.agent_id <> ''
+            AND p.role = 'agent'
+          ORDER BY
+            CASE
+              WHEN LOWER(COALESCE(p.agent_name, '')) = LOWER(COALESCE(a.agent_name, ''))
+              THEN 0 ELSE 1
+            END,
+            CASE WHEN COALESCE(p.is_active, TRUE) THEN 0 ELSE 1 END,
+            LENGTH(COALESCE(p.agent_name, '')) DESC,
+            p.created_at DESC NULLS LAST
+          LIMIT 1
+        ) p ON TRUE
         WHERE LOWER(COALESCE(a.team, '')) = LOWER(%s)
           AND a.audit_date::date >= %s AND a.audit_date::date <= %s
           AND a.quality_score IS NOT NULL

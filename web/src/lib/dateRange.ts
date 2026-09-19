@@ -81,3 +81,57 @@ export function defaultAnalyticsRange(): DateRange {
   start.setDate(end.getDate() - 8);
   return { start, end };
 }
+
+export function toIsoDate(day: Date | null | undefined): string {
+  if (!day) return "";
+  const y = day.getFullYear();
+  const m = String(day.getMonth() + 1).padStart(2, "0");
+  const d = String(day.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Parse YYYY-MM-DD into a local start-of-day Date, or null if invalid. */
+export function parseIsoDay(value: string | null | undefined): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [y, m, d] = value.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return startOfDay(new Date(y, m - 1, d));
+}
+
+/** Build a date range from URL `start` / `end` query values when both are valid. */
+export function rangeFromSearchParams(
+  params: URLSearchParams | { get: (key: string) => string | null },
+): DateRange | null {
+  const start = parseIsoDay(params.get("start"));
+  const end = parseIsoDay(params.get("end"));
+  if (!start || !end) return null;
+  if (start.getTime() > end.getTime()) return { start: end, end: start };
+  return { start, end };
+}
+
+/** Public app origin for deep links (emails). Prefers VITE_APP_URL. */
+export function appOrigin(): string {
+  const fromEnv = String(import.meta.env.VITE_APP_URL ?? "")
+    .trim()
+    .replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+  return "";
+}
+
+/** Deep link to My Audits filtered by inclusive date range. */
+export function employeeAuditsDeepLink(startIso: string, endIso: string): string {
+  const origin = appOrigin();
+  const query = new URLSearchParams({ start: startIso, end: endIso });
+  const path = `/employee/audits?${query.toString()}`;
+  return origin ? `${origin}${path}` : path;
+}
+
+/** Deep link to My Monitoring in the employee portal. */
+export function employeeMonitoringDeepLink(): string {
+  const origin = appOrigin();
+  const path = "/employee/monitoring";
+  return origin ? `${origin}${path}` : path;
+}

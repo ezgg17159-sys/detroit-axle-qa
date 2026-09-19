@@ -18,6 +18,9 @@ TEAM_TO_SLUG = {
     "live chat": "live-chat",
     "live-chat": "live-chat",
     "sales": "sales",
+    "quality assurance": "quality-assurance",
+    "quality-assurance": "quality-assurance",
+    "qa": "quality-assurance",
 }
 
 SLUG_TO_DB_TEAM = {
@@ -25,6 +28,7 @@ SLUG_TO_DB_TEAM = {
     "tickets": "Tickets",
     "live-chat": "Live Chat",
     "sales": "Sales",
+    "quality-assurance": "Quality Assurance",
 }
 
 
@@ -61,12 +65,13 @@ def fetch_evaluation_progress(
     if search and search.strip():
         search_sql = """
             AND (
-              COALESCE(p.display_name, p.agent_name, '') ILIKE %s
+              COALESCE(p.display_name, '') ILIKE %s
+              OR COALESCE(p.agent_name, '') ILIKE %s
               OR COALESCE(p.agent_id, '') ILIKE %s
             )
         """
         like = f"%{search.strip()}%"
-        params.extend([like, like])
+        params.extend([like, like, like])
 
     with external_connection() as conn:
         with conn.cursor() as cur:
@@ -265,3 +270,57 @@ def toggle_day_off(agent_id: str, iso_day: str, off: bool, *, user_name: str = "
                 (agent_id, status, month_anchor),
             )
             return False
+
+
+def set_scheduled_day_off(agent_id: str, weekday: str, *, user_name: str = "") -> str:
+    """Set weekly scheduled day off. `weekday` is Sun..Sat or empty to clear."""
+    schema = schema_name()
+    label = (weekday or "").strip()
+    if label and label not in WEEKDAY_LABELS:
+        raise ValueError(f"Invalid weekday “{label}”. Use Sun–Sat or empty.")
+
+    with external_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT team
+                FROM {schema}.profiles
+                WHERE agent_id = %s
+                ORDER BY COALESCE(is_active, FALSE) DESC
+                LIMIT 1
+                """,
+                (agent_id,),
+            )
+            profile = cur.fetchone()
+            team = (profile or {}).get("team") or ""
+
+            cur.execute(
+                f"""
+                DELETE FROM {schema}.agent_daily_status
+                WHERE agent_id = %s
+                  AND status LIKE 'OFF_WEEKDAY_%%'
+                """,
+                (agent_id,),
+            )
+
+            if not label:
+                return ""
+
+            idx = WEEKDAY_LABELS.index(label)
+            cur.execute(
+                f"""
+                INSERT INTO {schema}.agent_daily_status
+                  (id, agent_id, team, status_date, status, created_by_name, created_at)
+                VALUES
+                  (%s, %s, %s, %s, %s, %s, NOW())
+                """,
+                (
+                    str(uuid.uuid4()),
+                    agent_id,
+                    team,
+                    date(1970, 1, 1),
+                    f"OFF_WEEKDAY_{idx}",
+                    user_name or "QA System",
+                ),
+            )
+            return label

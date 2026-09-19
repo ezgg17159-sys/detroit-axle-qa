@@ -1,16 +1,25 @@
+import os
+
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Create the demo employee account for local development."
+    help = (
+        "Create the demo employee account for local development. "
+        "Requires DEMO_USER_PASSWORD in the environment."
+    )
 
     def handle(self, *args, **options):
-        username = "demo"
-        email = "demo@detroitaxle.com"
-        password = "DemoPass123!"
+        username = (os.environ.get("DEMO_USER_USERNAME") or "demo").strip()
+        email = (os.environ.get("DEMO_USER_EMAIL") or "demo@detroitaxle.com").strip()
+        password = (os.environ.get("DEMO_USER_PASSWORD") or "").strip()
+        if not password:
+            raise CommandError(
+                "DEMO_USER_PASSWORD must be set in the environment (never commit passwords)."
+            )
 
         user, created = User.objects.get_or_create(
             username=username,
@@ -33,8 +42,5 @@ class Command(BaseCommand):
 
         action = "Created" if created else "Updated"
         self.stdout.write(
-            self.style.SUCCESS(
-                f"{action} demo user '{username}' / '{email}' "
-                f"with password '{password}'."
-            )
+            self.style.SUCCESS(f"{action} demo user '{username}' / '{email}'.")
         )

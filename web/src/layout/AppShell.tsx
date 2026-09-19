@@ -1,25 +1,76 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { AppLoader } from "../components/AppLoader";
+import {
+  PageLoadingProvider,
+  usePageLoadingState,
+} from "../components/PageLoadingContext";
+import { SidebarActiveHighlight } from "../components/SidebarActiveHighlight";
 import { MenuIcon, UserIcon } from "../icons/NavIcons";
+import {
+  canAccessPath,
+  filterNavByPermissions,
+  listRolePermissions,
+  loadRolePermissionsRemote,
+  type PermissionsMatrix,
+} from "../lib/permissions";
+import {
+  resolveSupervisorTeamScope,
+  loadSupervisorTeamScope,
+  setActiveTeamScope,
+} from "../lib/teamScope";
 import { navItems, pageTitle } from "../nav/config";
 
-export function AppShell() {
-  const { user, isAuthenticated, logout } = useAuth();
+function AppShellContent() {
+  const { user, isAuthenticated, bootstrapping, logout } = useAuth();
   const location = useLocation();
+  const navRef = useRef<HTMLElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [pageLoading, setPageLoading] = useState(false);
+  const [permissions, setPermissions] = useState<PermissionsMatrix>(() =>
+    listRolePermissions(),
+  );
+  const { pageLoading } = usePageLoadingState();
 
   useEffect(() => {
-    setPageLoading(true);
-    const timer = window.setTimeout(() => setPageLoading(false), 320);
-    return () => window.clearTimeout(timer);
-  }, [location.pathname]);
+    void loadRolePermissionsRemote().then(setPermissions);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setActiveTeamScope(resolveSupervisorTeamScope(user));
+    void loadSupervisorTeamScope(user).then((scope) => {
+      if (!cancelled) setActiveTeamScope(scope);
+    });
+    return () => {
+      cancelled = true;
+      setActiveTeamScope(null);
+    };
+  }, [user]);
+
+  const visibleNav = useMemo(
+    () => filterNavByPermissions(navItems, user, permissions),
+    [user, permissions],
+  );
+
+  if (bootstrapping) {
+    return (
+      <div className="app-shell app-shell--boot">
+        <AppLoader variant="page" label="Loading session…" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (!canAccessPath(location.pathname, user, permissions)) {
+    const fallback = visibleNav[0]?.children[0]?.to || "/account";
+    if (location.pathname !== fallback) {
+      return <Navigate to={fallback} replace />;
+    }
   }
 
   return (
@@ -28,12 +79,19 @@ export function AppShell() {
         sidebarOpen ? "app-shell" : "app-shell app-shell--sidebar-collapsed"
       }
     >
-      <div className="sidebar__brand">
-        <img
-          className="sidebar__brand-logo"
-          src="/detroit-axle-logo.png"
-          alt="Detroit Axle"
-        />
+      <div className="sidebar__brand" aria-label="Detroit Axle">
+        <div className="sidebar__brand-swap" aria-hidden="true">
+          <img
+            className="sidebar__brand-logo sidebar__brand-logo--full"
+            src="/detroit-axle-logo.png"
+            alt=""
+          />
+          <img
+            className="sidebar__brand-logo sidebar__brand-logo--mark"
+            src="/small-logo.png"
+            alt=""
+          />
+        </div>
       </div>
 
       <header className="app-header">
@@ -73,7 +131,7 @@ export function AppShell() {
                 type="button"
                 role="menuitem"
                 className="app-header__user-item"
-                onClick={logout}
+                onClick={() => void logout()}
               >
                 Logout
               </button>
@@ -83,8 +141,9 @@ export function AppShell() {
       </header>
 
       <aside className="sidebar" aria-label="Main navigation">
-        <nav className="sidebar__nav">
-          {navItems.map((item) => {
+        <nav ref={navRef} className="sidebar__nav">
+          <SidebarActiveHighlight navRef={navRef} sidebarOpen={sidebarOpen} />
+          {visibleNav.map((item) => {
             const sectionActive =
               location.pathname === item.basePath ||
               location.pathname.startsWith(`${item.basePath}/`);
@@ -143,15 +202,22 @@ export function AppShell() {
 
       <div className="app-shell__content">
         <div key={location.pathname} className="app-shell__page">
+          <Outlet />
           {pageLoading ? (
             <div className="app-loader-overlay app-loader-overlay--shell">
               <AppLoader variant="page" label="Loading" />
             </div>
-          ) : (
-            <Outlet />
-          )}
+          ) : null}
         </div>
       </div>
     </div>
+  );
+}
+
+export function AppShell() {
+  return (
+    <PageLoadingProvider>
+      <AppShellContent />
+    </PageLoadingProvider>
   );
 }

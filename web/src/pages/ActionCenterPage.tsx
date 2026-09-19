@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { DateRangePicker } from "../components/DateRangePicker";
-import { defaultAnalyticsRange, type DateRange } from "../lib/dateRange";
+import { useShellPageLoading } from "../components/PageLoadingContext";
+import { defaultAnalyticsRange, toIsoDate, type DateRange } from "../lib/dateRange";
+import { fetchActionCenter } from "../lib/externalApi";
+import { getActiveTeamScope } from "../lib/teamScope";
 import { navItems } from "../nav/config";
 
 type QueueStatus = "urgent" | "watch" | "stable";
@@ -16,40 +19,40 @@ type QueueCard = {
   href: string;
 };
 
-const queueHealth: StatusCounts = {
+const EMPTY_COUNTS: StatusCounts = {
   urgent: "—",
   watch: "—",
   stable: "—",
 };
 
-const queueCards: QueueCard[] = [
+const DEFAULT_QUEUES: QueueCard[] = [
   {
     id: "supervisor-requests",
     title: "Supervisor Requests",
-    counts: { urgent: "—", watch: "—", stable: "—" },
+    counts: { ...EMPTY_COUNTS },
     href: "/requests-and-coaching/supervisor-requests",
   },
   {
     id: "open-feedback",
     title: "Open Feedback",
-    counts: { urgent: "—", watch: "—", stable: "—" },
+    counts: { ...EMPTY_COUNTS },
     href: "/monitoring-and-feedbacks/feedbacks",
   },
   {
     id: "active-monitoring",
     title: "Active Monitoring",
-    counts: { urgent: "—", watch: "—", stable: "—" },
+    counts: { ...EMPTY_COUNTS },
     href: "/monitoring-and-feedbacks/monitoring",
   },
   {
     id: "unreleased-audits",
     title: "Unreleased Audits",
-    counts: { urgent: "—", watch: "—", stable: "—" },
+    counts: { ...EMPTY_COUNTS },
     href: "/audits/audit-list",
   },
 ];
 
-const agingRows = [
+const DEFAULT_AGING = [
   { id: "requests-aging", label: "Requests aging 3+ days", count: "—" },
   { id: "feedback-overdue", label: "Feedback overdue", count: "—" },
   { id: "monitoring-aging", label: "Monitoring aging 2+ days", count: "—" },
@@ -85,6 +88,66 @@ function StatusPill({
 
 export function ActionCenterPage() {
   const [range, setRange] = useState<DateRange>(() => defaultAnalyticsRange());
+  const [health, setHealth] = useState<StatusCounts>({ ...EMPTY_COUNTS });
+  const [queues, setQueues] = useState<QueueCard[]>(DEFAULT_QUEUES);
+  const [agingRows, setAgingRows] = useState(DEFAULT_AGING);
+  const [loadDetail, setLoadDetail] = useState("");
+  const [loading, setLoading] = useState(true);
+  useShellPageLoading(loading);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void fetchActionCenter({
+      start: toIsoDate(range.start) || undefined,
+      end: toIsoDate(range.end) || undefined,
+      team: getActiveTeamScope() || "all",
+    })
+      .then((payload) => {
+        if (cancelled) return;
+        if (payload.connected) {
+          setHealth({
+            urgent: payload.health.urgent ?? "0",
+            watch: payload.health.watch ?? "0",
+            stable: payload.health.stable ?? "0",
+          });
+          setQueues(
+            payload.queues.length > 0
+              ? payload.queues.map((queue) => ({
+                  id: queue.id,
+                  title: queue.title,
+                  href: queue.href,
+                  counts: {
+                    urgent: queue.counts.urgent ?? "0",
+                    watch: queue.counts.watch ?? "0",
+                    stable: queue.counts.stable ?? "0",
+                  },
+                }))
+              : DEFAULT_QUEUES,
+          );
+          setAgingRows(payload.aging.length > 0 ? payload.aging : DEFAULT_AGING);
+          setLoadDetail("");
+          return;
+        }
+        setHealth({ ...EMPTY_COUNTS });
+        setQueues(DEFAULT_QUEUES);
+        setAgingRows(DEFAULT_AGING);
+        setLoadDetail(payload.detail || "External database disconnected.");
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setHealth({ ...EMPTY_COUNTS });
+        setQueues(DEFAULT_QUEUES);
+        setAgingRows(DEFAULT_AGING);
+        setLoadDetail(error instanceof Error ? error.message : "Unable to load action center.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [range.start, range.end]);
 
   return (
     <main className="action-center" aria-label="Action Center">
@@ -92,20 +155,26 @@ export function ActionCenterPage() {
         <DateRangePicker value={range} onChange={setRange} />
       </div>
 
+      {loadDetail ? (
+        <p className="audits-page__hint" role="status">
+          {loadDetail}
+        </p>
+      ) : null}
+
       <section className="action-health" aria-label="Immediate action required">
         <div className="action-health__copy">
           <p className="action-health__kicker">Immediate action required</p>
           <h3 className="action-health__title">Prioritize urgent work first</h3>
         </div>
         <div className="action-health__pills">
-          <StatusPill status="urgent" value={queueHealth.urgent} />
-          <StatusPill status="watch" value={queueHealth.watch} />
-          <StatusPill status="stable" value={queueHealth.stable} />
+          <StatusPill status="urgent" value={health.urgent} />
+          <StatusPill status="watch" value={health.watch} />
+          <StatusPill status="stable" value={health.stable} />
         </div>
       </section>
 
       <section className="action-queue-grid" aria-label="Action queues">
-        {queueCards.map((card) => (
+        {queues.map((card) => (
           <Link key={card.id} to={card.href} className="action-queue-card">
             <header className="action-queue-card__header">
               <h3 className="action-queue-card__title">{card.title}</h3>

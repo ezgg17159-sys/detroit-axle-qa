@@ -1,31 +1,66 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { useAuth } from "../../auth/AuthContext";
+import { useConfirmDelete } from "../../components/ConfirmDeleteContext";
+import { useShellPageLoading } from "../../components/PageLoadingContext";
+import { TableCheck } from "../../components/table/TableSelection";
+import { readAuditListView } from "../../lib/auditListView";
 import {
   caseTypeLabel,
   deleteAudit,
   formatAuditDate,
+  formatEarned,
   getAudit,
   resultLabel,
   saveAudit,
   teamLabel,
   type AuditRecord,
 } from "../../lib/audits";
+import { diffAudit, logAuditEdit, logAuditDelete } from "../../lib/teamTracking";
+import { deleteAuditRemote, fetchAudit, saveAuditRemote } from "../../lib/externalApi";
 import { useNotify } from "../../notifications/NotificationContext";
-import { NewAuditModal } from "./NewAuditModal";
 
 export function AuditDetailsPage() {
   const { auditId = "" } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { notify } = useNotify();
+  const { confirmDelete } = useConfirmDelete();
   const [audit, setAudit] = useState<AuditRecord | null>(() => getAudit(auditId));
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [reevaluateOpen, setReevaluateOpen] = useState(false);
-  const [coachingView, setCoachingView] = useState(false);
+  const [listView, setListView] = useState(() => readAuditListView());
+  const [savingReeval, setSavingReeval] = useState(false);
+  const [loading, setLoading] = useState(true);
+  useShellPageLoading(loading);
   const actionsRef = useRef<HTMLDivElement>(null);
+  const editorName = user?.full_name?.trim() || user?.username || "—";
 
   useEffect(() => {
-    setAudit(getAudit(auditId));
+    setListView(readAuditListView());
+  }, [auditId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const local = getAudit(auditId);
+    if (local) setAudit(local);
+    setLoading(true);
+
+    void fetchAudit(auditId)
+      .then((remote) => {
+        if (cancelled || !remote) return;
+        setAudit(remote);
+      })
+      .catch(() => {
+        if (!cancelled && !local) setAudit(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [auditId]);
 
   useEffect(() => {
@@ -58,34 +93,65 @@ export function AuditDetailsPage() {
     );
   }
 
-  const handleDelete = () => {
-    deleteAudit(audit.id);
-    notify("Audit deleted.", { variant: "success" });
-    navigate("/audits/audit-list", { replace: true });
+  const handleDelete = async () => {
+    setActionsOpen(false);
+    const ok = await confirmDelete({
+      title: `Delete audit for “${audit.agentName}”?`,
+      description: "This audit will be permanently removed from the list.",
+      confirmLabel: "Delete audit",
+    });
+    if (!ok) return;
+    try {
+      await deleteAuditRemote(audit.id);
+      logAuditDelete(audit, editorName);
+      deleteAudit(audit.id);
+      notify("Audit deleted.", { variant: "success" });
+      navigate("/audits/audit-list", { replace: true });
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Unable to delete audit.", {
+        variant: "error",
+      });
+    }
   };
 
-  const handleShare = () => {
-    const next = { ...audit, shared: true };
-    saveAudit(next);
-    setAudit(next);
-    setActionsOpen(false);
-    notify("Share with agent will use Power Automate later.", { variant: "info" });
-  };
-
-  const handleReEvaluate = () => {
-    setActionsOpen(false);
-    setReevaluateOpen(true);
-  };
-
-  const handleCoaching = () => {
-    setActionsOpen(false);
-    setCoachingView(true);
+  const handleReEvaluateToggle = async () => {
+    if (savingReeval) return;
+    const nextChecked = !Boolean(audit.reevaluated);
+    const next: AuditRecord = {
+      ...audit,
+      reevaluated: nextChecked,
+    };
+    setSavingReeval(true);
+    try {
+      const changes = diffAudit(audit, next);
+      const saved = await saveAuditRemote(next, { changes });
+      const merged = { ...saved, reevaluated: nextChecked };
+      saveAudit(merged);
+      logAuditEdit(audit, merged, editorName);
+      setAudit(merged);
+      notify(
+        nextChecked ? "Marked as re-evaluated." : "Re-evaluate cleared.",
+        { variant: "success" },
+      );
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Unable to update re-evaluate.", {
+        variant: "error",
+      });
+    } finally {
+      setSavingReeval(false);
+    }
   };
 
   const showOrderPhone = audit.team === "calls" || audit.team === "sales";
+  const reevaluated = Boolean(audit.reevaluated);
+  const showCreatedBy = listView === "audit";
 
   return (
-    <main className="audits-page audits-details" aria-label="Audit details">
+    <main
+      key={audit.id}
+      className="audits-page audits-details audits-details--animate"
+      aria-label="Audit details"
+    >
       <div className="audits-details__top">
         <Link to="/audits/audit-list" className="audits-back">
           <svg className="audits-back__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -115,15 +181,19 @@ export function AuditDetailsPage() {
           </button>
           {actionsOpen ? (
             <div className="audits-actions__menu" role="menu">
-              <button type="button" role="menuitem" className="audits-actions__item" onClick={handleReEvaluate}>
-                Re evaluate
-              </button>
-              <button type="button" role="menuitem" className="audits-actions__item" onClick={handleShare}>
-                Share with agent
-              </button>
-              <button type="button" role="menuitem" className="audits-actions__item" onClick={handleCoaching}>
-                My coaching
-              </button>
+              <label
+                className={`audits-actions__check${reevaluated ? " is-checked" : ""}${savingReeval ? " is-disabled" : ""}`}
+                role="menuitemcheckbox"
+                aria-checked={reevaluated}
+              >
+                <TableCheck
+                  checked={reevaluated}
+                  disabled={savingReeval}
+                  onChange={() => void handleReEvaluateToggle()}
+                  label="Re evaluate"
+                />
+                <span className="audits-actions__check-label">Re evaluate</span>
+              </label>
               <button type="button" role="menuitem" className="audits-actions__item audits-actions__item--danger" onClick={handleDelete}>
                 Delete
               </button>
@@ -139,6 +209,7 @@ export function AuditDetailsPage() {
             <h2 className="audits-details__name">{audit.agentName || "—"}</h2>
             <p className="audits-details__meta">
               {teamLabel(audit.team)} · {formatAuditDate(audit.date)}
+              {reevaluated ? " · Re-evaluated" : ""}
             </p>
           </div>
           <div className="audits-details__score">
@@ -173,7 +244,7 @@ export function AuditDetailsPage() {
               <span className="audits-detail-field__value">{audit.ticketNumber || "—"}</span>
             </div>
           )}
-          {!coachingView ? (
+          {showCreatedBy ? (
             <div className="audits-detail-field">
               <span className="audits-detail-field__label">Created by</span>
               <span className="audits-detail-field__value">{audit.createdBy || "—"}</span>
@@ -182,6 +253,10 @@ export function AuditDetailsPage() {
           <div className="audits-detail-field audits-detail-field--wide">
             <span className="audits-detail-field__label">Comments</span>
             <span className="audits-detail-field__value">{audit.comments || "—"}</span>
+          </div>
+          <div className="audits-detail-field audits-detail-field--wide">
+            <span className="audits-detail-field__label">Other information</span>
+            <span className="audits-detail-field__value">{audit.otherInformation || "—"}</span>
           </div>
         </div>
       </section>
@@ -204,7 +279,7 @@ export function AuditDetailsPage() {
                   <tr key={row.id}>
                     <td>{row.metric}</td>
                     <td>{resultLabel(row.result)}</td>
-                    <td>{row.earned}</td>
+                    <td>{formatEarned(row.earned)}</td>
                     <td>{row.qaNote || "—"}</td>
                   </tr>
                 ))}
@@ -213,16 +288,6 @@ export function AuditDetailsPage() {
           </div>
         </div>
       </section>
-
-      <NewAuditModal
-        open={reevaluateOpen}
-        reevaluateId={audit.id}
-        onClose={() => setReevaluateOpen(false)}
-        onSaved={() => {
-          setAudit(getAudit(audit.id));
-          setReevaluateOpen(false);
-        }}
-      />
     </main>
   );
 }

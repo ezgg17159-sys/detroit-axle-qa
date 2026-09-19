@@ -19,6 +19,13 @@
   flex-shrink: 0;
 }
 
+.analytics-page__status {
+  margin: 0;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
 .analytics-page__body {
   display: flex;
   flex-direction: column;
@@ -42,7 +49,7 @@
   min-height: 0;
   padding: 12px 14px;
   background: var(--surface-card);
-  border: 1px solid rgba(17, 29, 51, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
 }
 
@@ -82,7 +89,7 @@
   height: 100%;
   padding: 12px 14px;
   background: var(--surface-card);
-  border: 1px solid rgba(17, 29, 51, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -109,7 +116,7 @@
   gap: 10px;
   flex-shrink: 0;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(17, 29, 51, 0.06);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .analytics-big-card__title {
@@ -180,79 +187,6 @@
   flex-direction: column;
   min-height: 0;
   margin-top: 8px;
-}
-
-.quality-trend {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.quality-trend__chart-wrap {
-  flex: 1;
-  min-height: 0;
-  padding: 0;
-  background: var(--surface-card);
-  border: none;
-}
-
-.quality-trend__svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-}
-
-.quality-trend__plot {
-  fill: var(--surface-card);
-  stroke: rgba(17, 29, 51, 0.1);
-  stroke-width: 1;
-}
-
-.quality-trend__guide {
-  stroke: rgba(17, 29, 51, 0.08);
-  stroke-width: 1;
-}
-
-.quality-trend__axis-label {
-  fill: var(--color-muted);
-  font-family: var(--font-text);
-  font-size: 9px;
-  font-weight: 500;
-}
-
-.quality-trend__area {
-  fill: rgba(56, 180, 229, 0.12);
-}
-
-.quality-trend__line {
-  fill: none;
-  stroke: var(--color-accent);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.quality-trend__dot {
-  fill: var(--surface-card);
-  stroke: var(--color-accent);
-  stroke-width: 2;
-}
-
-.quality-trend__empty-text {
-  fill: var(--color-muted);
-  font-family: var(--font-text);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-[data-theme="dark"] .quality-trend__plot {
-  stroke: rgba(255, 255, 255, 0.12);
-}
-
-[data-theme="dark"] .quality-trend__guide {
-  stroke: rgba(255, 255, 255, 0.08);
 }
 
 @media (max-width: 1200px) {

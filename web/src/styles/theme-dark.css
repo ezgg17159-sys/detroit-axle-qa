@@ -1,0 +1,342 @@
+/* Dark theme polish for hardcoded light-only colors */
+
+[data-theme="dark"] .btn-primary,
+[data-theme="dark"] .login-submit,
+[data-theme="dark"] .cases-add-btn,
+[data-theme="dark"] .cases-steps__item.is-active .cases-steps__num,
+[data-theme="dark"] .confirm-delete__btn--danger,
+[data-theme="dark"] .eval-progress__chip,
+[data-theme="dark"] .audits-new__btn {
+  color: var(--text-on-accent);
+}
+
+/* Login form panel adapts with theme */
+[data-theme="dark"] .login-side {
+  background: linear-gradient(180deg, #132238 0%, #0f1a2b 100%);
+  border-left-color: rgba(56, 180, 229, 0.28);
+  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] .login-title,
+[data-theme="dark"] .login-check {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .login-input {
+  border-color: var(--color-border);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-card);
+}
+
+[data-theme="dark"] .login-input::placeholder {
+  color: var(--color-placeholder);
+}
+
+[data-theme="dark"] .login-input:focus {
+  border-color: var(--color-accent);
+  box-shadow:
+    var(--shadow-card),
+    0 0 0 3px rgba(56, 180, 229, 0.28);
+}
+
+[data-theme="dark"] .login-divider span {
+  background: transparent;
+  color: var(--color-muted);
+}
+
+[data-theme="dark"] .login-divider::before,
+[data-theme="dark"] .login-divider::after {
+  background: var(--color-border);
+}
+
+/* Overlays + modal chrome */
+[data-theme="dark"] .confirm-delete,
+[data-theme="dark"] .cases-modal,
+[data-theme="dark"] .audits-modal,
+[data-theme="dark"] .dept-modal {
+  background: var(--surface-overlay);
+}
+
+[data-theme="dark"] .confirm-delete__dialog,
+[data-theme="dark"] .cases-modal__dialog,
+[data-theme="dark"] .audits-modal__dialog,
+[data-theme="dark"] .dept-modal__dialog {
+  background: var(--surface-card);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-modal);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .confirm-delete__btn--ghost:hover {
+  background: var(--surface-subtle);
+}
+
+/* Cards / panels with light navy borders */
+[data-theme="dark"] .analytics-mini-card,
+[data-theme="dark"] .analytics-big-card,
+[data-theme="dark"] .action-health,
+[data-theme="dark"] .action-queue-card,
+[data-theme="dark"] .rankings-card,
+[data-theme="dark"] .reports-card,
+[data-theme="dark"] .employee-kpi-card,
+[data-theme="dark"] .employee-card,
+[data-theme="dark"] .data-table-shell {
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .analytics-big-card__header,
+[data-theme="dark"] .action-queue-card__header,
+[data-theme="dark"] .cases-modal__header,
+[data-theme="dark"] .audits-modal__header,
+[data-theme="dark"] .dept-modal__header,
+[data-theme="dark"] .mu-permissions__row {
+  border-color: var(--color-border);
+}
+
+/* Subtle fills */
+[data-theme="dark"] .action-status,
+[data-theme="dark"] .cases-steps__item,
+[data-theme="dark"] .cases-steps__num,
+[data-theme="dark"] .cases-field__hint,
+[data-theme="dark"] .dept-modal__row,
+[data-theme="dark"] .mu-permissions__row:hover,
+[data-theme="dark"] .production-stat,
+[data-theme="dark"] .eval-progress__meta-chip {
+  background: var(--surface-subtle);
+}
+
+[data-theme="dark"] .action-status--urgent {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+[data-theme="dark"] .action-health__kicker,
+[data-theme="dark"] .action-status--urgent .action-status__value {
+  color: var(--color-danger);
+}
+
+[data-theme="dark"] .cases-steps__item.is-active {
+  background: rgba(56, 180, 229, 0.18);
+  color: var(--color-accent-deep);
+}
+
+/* Inputs / selects */
+[data-theme="dark"] .cases-field__control,
+[data-theme="dark"] .audits-search__field,
+[data-theme="dark"] .audits-search__input,
+[data-theme="dark"] .audits-field__input,
+[data-theme="dark"] .audits-field__textarea,
+[data-theme="dark"] .audits-inline-input,
+[data-theme="dark"] .audits-inline-select,
+[data-theme="dark"] .audits-result-select__trigger,
+[data-theme="dark"] .audits-result-select__menu,
+[data-theme="dark"] .audits-filter__trigger,
+[data-theme="dark"] .audits-filter__menu,
+[data-theme="dark"] .eval-progress__dayoff-trigger,
+[data-theme="dark"] .eval-progress__dayoff-menu,
+[data-theme="dark"] .audits-agent-search__menu,
+[data-theme="dark"] .cases-select__trigger,
+[data-theme="dark"] .cases-select__menu,
+[data-theme="dark"] .rankings-filter__trigger,
+[data-theme="dark"] .rankings-filter__menu,
+[data-theme="dark"] .reports-filter__trigger,
+[data-theme="dark"] .reports-filter__menu,
+[data-theme="dark"] .date-range__trigger,
+[data-theme="dark"] .date-range__nav,
+[data-theme="dark"] .date-range__day,
+[data-theme="dark"] .date-range__grid,
+[data-theme="dark"] .mu-password__input {
+  background: var(--surface-input);
+  border-color: var(--color-border);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .audits-search__input::placeholder,
+[data-theme="dark"] .audits-field__input::placeholder,
+[data-theme="dark"] .audits-field__textarea::placeholder,
+[data-theme="dark"] .audits-inline-input::placeholder,
+[data-theme="dark"] .cases-field__control::placeholder {
+  color: var(--color-placeholder);
+}
+
+[data-theme="dark"] .audits-filter__option:hover,
+[data-theme="dark"] .audits-agent-search__option:hover,
+[data-theme="dark"] .audits-agent-search__option.is-active,
+[data-theme="dark"] .audits-result-select__option:hover,
+[data-theme="dark"] .audits-result-select__option.is-active,
+[data-theme="dark"] .cases-select__option:hover,
+[data-theme="dark"] .rankings-filter__option:hover,
+[data-theme="dark"] .reports-filter__option:hover,
+[data-theme="dark"] .eval-progress__dayoff-option:hover {
+  background: var(--surface-menu-hover);
+}
+
+[data-theme="dark"] .audits-filter__option.is-active,
+[data-theme="dark"] .cases-select__option.is-active,
+[data-theme="dark"] .rankings-filter__option.is-active,
+[data-theme="dark"] .reports-filter__option.is-active,
+[data-theme="dark"] .eval-progress__dayoff-option.is-active {
+  background: var(--color-info-bg);
+  color: var(--color-accent-deep);
+}
+
+/* Tables */
+[data-theme="dark"] .data-table thead th,
+[data-theme="dark"] .eval-progress__locked-table thead th,
+[data-theme="dark"] .eval-progress__days-table thead th,
+[data-theme="dark"] .eval-progress__meta-table thead th,
+[data-theme="dark"] .team-heatmap__table thead .team-heatmap__sticky {
+  background: var(--surface-table-header);
+  color: var(--text-primary);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .data-table tbody td {
+  border-bottom-color: var(--color-border);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .data-table tbody tr:hover td {
+  background: var(--surface-subtle);
+}
+
+[data-theme="dark"] .data-table-footer {
+  background: var(--surface-card);
+  border-color: var(--color-border);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .data-table-pager__btn {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .data-table-pager__btn:hover:not(:disabled) {
+  background: rgba(56, 180, 229, 0.16);
+}
+
+[data-theme="dark"] .data-table-pager__btn.is-active {
+  background: rgba(56, 180, 229, 0.28);
+  border-color: rgba(56, 180, 229, 0.55);
+  color: #7ad0f0;
+  font-weight: 650;
+}
+
+[data-theme="dark"] .data-table__sort-icons {
+  color: var(--text-faint);
+}
+
+/* Custom checkboxes that used solid white plates */
+[data-theme="dark"] .mu-check__box,
+[data-theme="dark"] .reports-check__box,
+[data-theme="dark"] .audits-check__box {
+  background: var(--surface-input);
+  border-color: var(--color-border-strong);
+}
+
+[data-theme="dark"] .mu-check input:checked + .mu-check__box,
+[data-theme="dark"] .reports-check input:checked + .reports-check__box,
+[data-theme="dark"] .audits-check input:checked + .audits-check__box {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+[data-theme="dark"] .mu-check input:checked + .mu-check__box::after,
+[data-theme="dark"] .reports-check input:checked + .reports-check__box::after,
+[data-theme="dark"] .audits-check input:checked + .audits-check__box::after {
+  border-color: var(--text-on-accent);
+}
+
+[data-theme="dark"] .data-table__check-box {
+  background: var(--surface-input);
+  border-color: var(--color-border-strong);
+}
+
+[data-theme="dark"] .data-table__check.is-checked .data-table__check-box,
+[data-theme="dark"] .data-table__check.is-indeterminate .data-table__check-box {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+[data-theme="dark"] .data-table tbody tr.is-selected td,
+[data-theme="dark"] .audits-table__row.is-selected td {
+  background: rgba(56, 180, 229, 0.14);
+}
+
+/* Soft danger / failed states */
+[data-theme="dark"] .audits-row--failed,
+[data-theme="dark"] .audits-detail--failed {
+  background: var(--color-danger-bg);
+}
+
+/* Charts */
+[data-theme="dark"] .trend-chart {
+  --trend-guide: color-mix(in srgb, var(--color-muted) 28%, transparent);
+  --trend-base: color-mix(in srgb, var(--color-muted) 48%, transparent);
+}
+
+/* Feedback date-range locals */
+[data-theme="dark"] .agent-feedback-page {
+  --dr-line: var(--color-border);
+  --dr-mid: rgba(56, 180, 229, 0.18);
+  --dr-mid-text: #7ad0f0;
+}
+
+/* Permissions / manage users */
+[data-theme="dark"] .mu-permissions__panel,
+[data-theme="dark"] .mu-permissions__grid-head {
+  background: var(--surface-card);
+  border-color: var(--color-border);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .mu-view-meta strong,
+[data-theme="dark"] .mu-permissions__group-title {
+  color: var(--text-primary);
+}
+
+/* Account */
+[data-theme="dark"] .account-role-badge {
+  background: rgba(56, 180, 229, 0.18);
+  color: var(--color-accent-deep);
+}
+
+/* Generic form controls */
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+  color-scheme: dark;
+}
+
+/* Soften remaining white plates on toggles */
+[data-theme="dark"] .mu-toggle__knob {
+  background: #ffffff;
+}
+
+/* Toast stays on existing dark rules; reinforce text */
+[data-theme="dark"] .toast {
+  color: var(--text-primary);
+  background: var(--surface-toast);
+  box-shadow: var(--shadow-menu);
+}
+
+[data-theme="dark"] .toast--error {
+  color: #ffb4bb;
+  background: #3a1a20;
+  border-color: #7a353d;
+}
+
+[data-theme="dark"] .toast--info {
+  color: #9adcf0;
+  background: #163245;
+  border-color: #2f6178;
+}
+
+[data-theme="dark"] .toast--success {
+  color: #8fe0b4;
+  background: #143528;
+  border-color: #2f6b4c;
+}

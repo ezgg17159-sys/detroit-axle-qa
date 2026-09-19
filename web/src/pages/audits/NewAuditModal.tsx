@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../auth/AuthContext";
 import {
-  CASE_TYPE_OPTIONS,
   RESULT_OPTIONS,
   TEAM_OPTIONS,
   caseTypeLabel,
@@ -11,21 +11,26 @@ import {
   createEmptyMetrics,
   earnedForResult,
   formatAuditDate,
+  formatEarned,
   getAudit,
   listAgents,
+  matchesAgentSearch,
   newAuditId,
   resultLabel,
   saveAudit,
   teamLabel,
   todayIsoDate,
+  withoutIssueResolvedMetrics,
   type AuditTeam,
   type CaseType,
   type EvalResult,
   type QaMetricRow,
 } from "../../lib/audits";
+import { fetchAgents, fetchCaseTypes, fetchTeamMetrics, saveAuditRemote } from "../../lib/externalApi";
+import { diffAudit, logAuditEdit } from "../../lib/teamTracking";
 import { useNotify } from "../../notifications/NotificationContext";
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3;
 
 type NewAuditModalProps = {
   open: boolean;
@@ -41,12 +46,37 @@ function AgentSearch({
 }: {
   team: AuditTeam | "";
   selectedId: string;
-  onSelect: (agent: { id: string; name: string; alias: string; lastInternalAudit: string }) => void;
+  onSelect: (agent: {
+    id: string;
+    name: string;
+    alias: string;
+    lastInternalAudit: string;
+    lastInternalAuditScore?: string;
+  }) => void;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [agents, setAgents] = useState(() => listAgents());
   const rootRef = useRef<HTMLDivElement>(null);
-  const agents = useMemo(() => listAgents(), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchAgents({ team: team || "all" })
+      .then((payload) => {
+        if (cancelled) return;
+        if (payload.connected && payload.agents.length > 0) {
+          setAgents(payload.agents);
+        } else {
+          setAgents(listAgents());
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAgents(listAgents());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [team]);
 
   const pool = useMemo(
     () => (team ? agents.filter((agent) => agent.team === team) : []),
@@ -55,16 +85,25 @@ function AgentSearch({
 
   const matches = useMemo(() => {
     if (!team) return [];
-    const q = query.trim().toLowerCase();
-    if (!q) return pool;
-    return pool.filter(
-      (agent) =>
-        agent.name.toLowerCase().includes(q) ||
-        agent.alias.toLowerCase().includes(q),
-    );
-  }, [pool, query, team]);
+    if (selectedId) {
+      const agent = agents.find((row) => row.id === selectedId);
+      if (agent) {
+        const label =
+          agent.alias && agent.alias !== agent.name
+            ? `${agent.name} · ${agent.alias}`
+            : agent.name;
+        if (query === label || query === agent.name) return pool;
+      }
+    }
+    return pool.filter((agent) => matchesAgentSearch(agent, query));
+  }, [agents, pool, query, selectedId, team]);
 
-  const selected = agents.find((agent) => agent.id === selectedId);
+  useEffect(() => {
+    if (!selectedId) return;
+    const agent = agents.find((row) => row.id === selectedId);
+    if (!agent) return;
+    setQuery(agent.alias && agent.alias !== agent.name ? `${agent.name} · ${agent.alias}` : agent.name);
+  }, [selectedId, agents]);
 
   useEffect(() => {
     if (!open) return;
@@ -105,8 +144,12 @@ function AgentSearch({
           placeholder={team ? "Search by name or alias…" : "Select a team first"}
           value={query}
           onChange={(event) => {
-            setQuery(event.target.value);
+            const next = event.target.value;
+            setQuery(next);
             setOpen(true);
+            if (selectedId) {
+              onSelect({ id: "", name: "", alias: "", lastInternalAudit: "—", lastInternalAuditScore: "" });
+            }
           }}
           onFocus={() => {
             if (team) setOpen(true);
@@ -114,30 +157,11 @@ function AgentSearch({
         />
       </div>
 
-      {selected ? (
-        <div className="audits-agent-selected">
-          <div className="audits-agent-selected__text">
-            <span className="audits-agent-selected__name">{selected.name}</span>
-            <span className="audits-agent-selected__alias">{selected.alias}</span>
-          </div>
-          <button
-            type="button"
-            className="audits-agent-selected__clear"
-            onClick={() => {
-              onSelect({ id: "", name: "", alias: "", lastInternalAudit: "—" });
-              setQuery("");
-            }}
-          >
-            Change
-          </button>
-        </div>
-      ) : null}
-
       {open && team ? (
         <div className="audits-agent-search__menu" id="new-audit-agent-list" role="listbox">
           {matches.length === 0 ? (
             <p className="audits-filter__empty">
-              {query.trim() ? "No agents found" : "Type to search agents"}
+              {query.trim() ? "No agents found" : "Type a name or alias to search"}
             </p>
           ) : (
             matches.map((agent) => (
@@ -153,18 +177,153 @@ function AgentSearch({
                     name: agent.name,
                     alias: agent.alias,
                     lastInternalAudit: agent.lastInternalAudit,
+                    lastInternalAuditScore: agent.lastInternalAuditScore || "",
                   });
-                  setQuery("");
+                  setQuery(
+                    agent.alias && agent.alias !== agent.name
+                      ? `${agent.name} · ${agent.alias}`
+                      : agent.name,
+                  );
                   setOpen(false);
                 }}
               >
                 <span className="audits-agent-search__name">{agent.name}</span>
-                <span className="audits-agent-search__meta">{agent.alias}</span>
+                <span className="audits-agent-search__meta">
+                  {agent.alias}
+                  {agent.lastInternalAuditScore ? ` · ${agent.lastInternalAuditScore}%` : ""}
+                </span>
               </button>
             ))
           )}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function InlineResultSelect({
+  value,
+  onChange,
+}: {
+  value: EvalResult;
+  onChange: (value: EvalResult) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; placement: "up" | "down" } | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const selected = RESULT_OPTIONS.find((option) => option.id === value)?.label ?? "N/A";
+
+  const close = useCallback(() => setOpen(false), []);
+
+  const reposition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuHeight = menuRef.current?.offsetHeight || 160;
+    const menuWidth = Math.max(rect.width, menuRef.current?.offsetWidth || 140);
+    const gap = 4;
+    const pad = 8;
+    const spaceBelow = window.innerHeight - rect.bottom - pad;
+    const spaceAbove = rect.top - pad;
+    const placement: "up" | "down" =
+      spaceBelow < menuHeight + gap && spaceAbove > spaceBelow ? "up" : "down";
+
+    let top = placement === "down" ? rect.bottom + gap : rect.top - gap - menuHeight;
+    let left = rect.left;
+    top = Math.max(pad, Math.min(top, window.innerHeight - menuHeight - pad));
+    left = Math.max(pad, Math.min(left, window.innerWidth - menuWidth - pad));
+
+    setCoords({ top, left, width: menuWidth, placement });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setCoords(null);
+      return;
+    }
+    reposition();
+  }, [open, reposition]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      close();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        close();
+      }
+    };
+    const onReposition = () => reposition();
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+    };
+  }, [open, close, reposition]);
+
+  return (
+    <div className={`audits-result-select${open ? " is-open" : ""}`} ref={rootRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`audits-result-select__trigger${open ? " is-open" : ""}${coords ? ` is-${coords.placement}` : ""}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Result"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className={`audits-result-select__value is-${value}`}>{selected}</span>
+        <svg className="audits-result-select__chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <polyline points="6 9 12 15 18 9" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className={`audits-result-select__menu audits-result-select__menu--fixed is-${coords?.placement ?? "down"}${coords ? "" : " is-measuring"}`}
+              role="listbox"
+              style={
+                coords
+                  ? { top: coords.top, left: coords.left, width: coords.width }
+                  : { top: 0, left: 0, visibility: "hidden" }
+              }
+            >
+              {RESULT_OPTIONS.map((option) => {
+                const isActive = option.id === value;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="option"
+                    aria-selected={isActive}
+                    className={`audits-result-select__option is-${option.id}${isActive ? " is-active" : ""}`}
+                    onClick={() => {
+                      onChange(option.id);
+                      close();
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -262,11 +421,13 @@ function emptyFormState() {
     agentName: "",
     alias: "",
     lastInternalAudit: "—",
+    lastInternalAuditScore: "",
     caseType: "" as CaseType | "",
     orderNumber: "",
     phoneNumber: "",
     ticketId: "",
     comments: "",
+    otherInformation: "",
     metrics: createEmptyMetrics(),
     issueResolved: "" as "yes" | "no" | "",
     issueResolvedNote: "",
@@ -285,18 +446,32 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
   const [agentName, setAgentName] = useState("");
   const [alias, setAlias] = useState("");
   const [lastInternalAudit, setLastInternalAudit] = useState("—");
+  const [lastInternalAuditScore, setLastInternalAuditScore] = useState("");
   const [caseType, setCaseType] = useState<CaseType | "">("");
   const [auditDate] = useState(todayIsoDate());
   const [orderNumber, setOrderNumber] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [ticketId, setTicketId] = useState("");
   const [comments, setComments] = useState("");
+  const [otherInformation, setOtherInformation] = useState("");
   const [metrics, setMetrics] = useState<QaMetricRow[]>(() => createEmptyMetrics());
   const [issueResolved, setIssueResolved] = useState<"yes" | "no" | "">("");
   const [issueResolvedNote, setIssueResolvedNote] = useState("");
+  const [originalCreatedBy, setOriginalCreatedBy] = useState("");
+  const [originalAuditDate, setOriginalAuditDate] = useState("");
+  const [caseTypeOptions, setCaseTypeOptions] = useState<Array<{ id: CaseType; label: string }>>([]);
+  const wasOpenRef = useRef(false);
+  const metricsTeamRef = useRef<AuditTeam | "">("");
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+
+    const justOpened = !wasOpenRef.current;
+    wasOpenRef.current = true;
+    if (!justOpened) return;
 
     const reset = emptyFormState();
     setStep(reset.step);
@@ -305,14 +480,20 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
     setAgentName(reset.agentName);
     setAlias(reset.alias);
     setLastInternalAudit(reset.lastInternalAudit);
+    setLastInternalAuditScore(reset.lastInternalAuditScore);
     setCaseType(reset.caseType);
     setOrderNumber(reset.orderNumber);
     setPhoneNumber(reset.phoneNumber);
     setTicketId(reset.ticketId);
     setComments(reset.comments);
+    setOtherInformation(reset.otherInformation);
     setMetrics(reset.metrics);
     setIssueResolved(reset.issueResolved);
     setIssueResolvedNote(reset.issueResolvedNote);
+    setOriginalCreatedBy("");
+    setOriginalAuditDate("");
+    setCaseTypeOptions([]);
+    metricsTeamRef.current = "";
 
     if (reevaluateId) {
       const existing = getAudit(reevaluateId);
@@ -322,26 +503,98 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
         setAgentName(existing.agentName);
         setAlias(existing.alias);
         setLastInternalAudit(existing.lastInternalAudit || formatAuditDate(existing.date));
+        setLastInternalAuditScore(existing.qualityScore || existing.score || "");
         setCaseType(existing.caseType);
         setOrderNumber(existing.orderNumber);
         setPhoneNumber(existing.phoneNumber);
         setTicketId(existing.ticketNumber);
         setComments(existing.comments);
-        setMetrics(existing.metrics.length ? existing.metrics : createEmptyMetrics());
+        setOtherInformation(existing.otherInformation || "");
+        setMetrics(
+          existing.metrics.length
+            ? withoutIssueResolvedMetrics(existing.metrics)
+            : createEmptyMetrics(),
+        );
         setIssueResolved(existing.issueResolved);
         setIssueResolvedNote(existing.issueResolvedNote);
+        setOriginalCreatedBy(existing.createdBy || "");
+        setOriginalAuditDate(existing.date || "");
+        metricsTeamRef.current = existing.team;
       }
     }
+  }, [open, reevaluateId]);
 
+  useEffect(() => {
+    if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, reevaluateId, onClose]);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open || !team) {
+      setCaseTypeOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void fetchCaseTypes({ team })
+      .then((payload) => {
+        if (cancelled) return;
+        const options = (payload.caseTypes ?? [])
+          .filter((row) => row.active !== false)
+          .map((row) => ({
+            id: (row.name || row.id) as CaseType,
+            label: row.name || row.id,
+          }));
+        setCaseTypeOptions(options);
+      })
+      .catch(() => {
+        if (!cancelled) setCaseTypeOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, team]);
+
+  useEffect(() => {
+    if (!open || !team || reevaluateId) return;
+    if (metricsTeamRef.current === team) return;
+    let cancelled = false;
+    void fetchTeamMetrics({ team })
+      .then((payload) => {
+        if (cancelled) return;
+        metricsTeamRef.current = team;
+        if (!payload.connected || payload.metrics.length === 0) {
+          setMetrics(createEmptyMetrics());
+          return;
+        }
+        setMetrics(
+          withoutIssueResolvedMetrics(payload.metrics).map((row) => ({
+            id: row.id,
+            metric: row.label,
+            result: "n/a" as EvalResult,
+            earned: "—",
+            qaNote: "",
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          metricsTeamRef.current = team;
+          setMetrics(createEmptyMetrics());
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, team, reevaluateId]);
 
   const createdByName = user?.full_name || user?.username || "—";
-  const qualityScore = computeQualityScore(metrics);
+  const editorName = user?.full_name?.trim() || user?.username || "—";
+  const evaluationMetrics = useMemo(() => withoutIssueResolvedMetrics(metrics), [metrics]);
+  const qualityScore = computeQualityScore(evaluationMetrics);
   const needsOrderPhone = team === "calls" || team === "sales";
   const needsTicket = team === "tickets" || team === "live-chat";
 
@@ -350,11 +603,14 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
     name: string;
     alias: string;
     lastInternalAudit: string;
+    lastInternalAuditScore?: string;
   }) => {
     setAgentId(agent.id);
     setAgentName(agent.name);
     setAlias(agent.alias);
-    setLastInternalAudit(agent.lastInternalAudit || "—");
+    const last = (agent.lastInternalAudit || "").trim();
+    setLastInternalAudit(last && last !== "—" ? formatAuditDate(last) : "—");
+    setLastInternalAuditScore((agent.lastInternalAuditScore || "").trim());
   };
 
   const updateMetric = (id: string, patch: Partial<QaMetricRow>) => {
@@ -369,59 +625,79 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
   };
 
   const canStep1 = Boolean(team && agentId);
-  const canStep2 = Boolean(caseType);
-  const canStep3 = Boolean(issueResolved);
-  const canSave = canStep1 && canStep2 && canStep3;
+  const canStep2 = Boolean(caseType && issueResolved);
+  const canSave = canStep1 && canStep2;
 
   const goNext = () => {
     if (step === 1 && !canStep1) {
       notify("Select a team and search for an agent to continue.", { variant: "error" });
       return;
     }
-    if (step === 2 && !caseType) {
-      notify("Select a case type to continue.", { variant: "error" });
-      return;
+    if (step === 2) {
+      if (!caseType) {
+        notify("Select a case type to continue.", { variant: "error" });
+        return;
+      }
+      if (!issueResolved) {
+        notify("Select whether the issue was resolved.", { variant: "error" });
+        return;
+      }
     }
-    if (step === 3 && !issueResolved) {
-      notify("Select whether the issue was resolved.", { variant: "error" });
-      return;
-    }
-    setStep((current) => Math.min(4, current + 1) as Step);
+    setStep((current) => Math.min(3, current + 1) as Step);
   };
 
   const goBack = () => setStep((current) => Math.max(1, current - 1) as Step);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!canSave || !team || !caseType) return;
     const id = reevaluateId || newAuditId();
     const score = qualityScore;
-    saveAudit({
+    const existing = reevaluateId ? getAudit(reevaluateId) : null;
+    const next = {
       id,
-      date: auditDate,
+      date: reevaluateId && originalAuditDate ? originalAuditDate : auditDate,
       team,
       agentName: agentName.trim() || "—",
       alias: alias.trim() || "—",
       agentId: agentId || "",
       score,
-      shared: false,
-      evaluate: "done",
+      shared: existing?.shared ?? false,
+      evaluate: "done" as const,
+      reevaluated: Boolean(reevaluateId) || Boolean(existing?.reevaluated),
       caseType,
       status: "Completed",
       ticketNumber: ticketId.trim(),
       orderNumber: orderNumber.trim(),
       phoneNumber: phoneNumber.trim(),
       comments: comments.trim(),
-      createdBy: createdByName,
+      otherInformation: otherInformation.trim(),
+      createdBy: reevaluateId ? originalCreatedBy || createdByName : createdByName,
       qualityScore: score,
       issueResolved,
       issueResolvedNote: issueResolvedNote.trim(),
-      metrics,
+      metrics: evaluationMetrics,
       lastInternalAudit,
-    });
-    notify(reevaluateId ? "Audit re-evaluated." : "Audit saved.", { variant: "success" });
-    onClose();
-    if (onSaved) onSaved(id);
-    else navigate(`/audits/audit-details/${id}`);
+    };
+    try {
+      const changes =
+        existing && reevaluateId ? diffAudit(existing, next) : undefined;
+      const saved = await saveAuditRemote(next, {
+        isNew: !reevaluateId,
+        changes: changes?.length ? changes : undefined,
+      });
+      saveAudit(saved);
+      if (existing && reevaluateId) {
+        logAuditEdit(existing, saved, editorName);
+      }
+      notify(reevaluateId ? "Audit re-evaluated." : "Audit saved.", { variant: "success" });
+      onClose();
+      if (onSaved) onSaved(saved.id);
+      else navigate(`/audits/audit-details/${saved.id}`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Unable to save audit.", {
+        variant: "error",
+      });
+    }
   };
 
   if (!open) return null;
@@ -444,9 +720,9 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
         <div className="audits-modal__header">
           <div>
             <h2 id="new-audit-title" className="audits-modal__title">
-              {reevaluateId ? "Re evaluate audit" : "New audit"}
+              {reevaluateId ? "Re evaluate audit" : "Add audit"}
             </h2>
-            <p className="audits-modal__subtitle">Step {step} of 4</p>
+            <p className="audits-modal__subtitle">Step {step} of 3</p>
           </div>
           <button type="button" className="audits-modal__close" aria-label="Close" onClick={onClose}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -456,7 +732,7 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
         </div>
 
         <div className="audits-steps audits-steps--modal" aria-label="Wizard steps">
-          {[1, 2, 3, 4].map((n) => (
+          {[1, 2, 3].map((n) => (
             <button
               key={n}
               type="button"
@@ -467,15 +743,14 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
             >
               <span className="audits-steps__num">{n}</span>
               <span className="audits-steps__label">
-                {n === 1 ? "Team & agent" : n === 2 ? "Audit details" : n === 3 ? "QA evaluation" : "Final overview"}
+                {n === 1 ? "Team & agent" : n === 2 ? "Details & QA" : "Final overview"}
               </span>
             </button>
           ))}
         </div>
 
-        <div className={`audits-modal__body${step >= 3 ? " audits-modal__body--scroll" : ""}`}>
-          {step === 1 ? (
-            <div className="audits-wizard-panel">
+        <div className={`audits-modal__body${step >= 2 ? " audits-modal__body--scroll" : ""}`}>
+          <div className="audits-wizard-panel" hidden={step !== 1}>
               <h3 className="audits-section-title">Select team and agent</h3>
               <div className="audits-form-grid">
                 <FilterSelect
@@ -485,7 +760,9 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
                   placeholder="Select team"
                   onChange={(value) => {
                     setTeam(value);
-                    selectAgent({ id: "", name: "", alias: "", lastInternalAudit: "—" });
+                    setCaseType("");
+                    metricsTeamRef.current = "";
+                    selectAgent({ id: "", name: "", alias: "", lastInternalAudit: "—", lastInternalAuditScore: "" });
                   }}
                 />
                 <AgentSearch team={team} selectedId={agentId} onSelect={selectAgent} />
@@ -499,21 +776,24 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
               {team && agentId ? (
                 <div className="audits-last-audit">
                   <span className="audits-last-audit__label">Last internal audit</span>
-                  <span className="audits-last-audit__value">{lastInternalAudit}</span>
+                  <span className="audits-last-audit__value">
+                    {lastInternalAudit}
+                    {lastInternalAuditScore ? (
+                      <span className="audits-last-audit__score"> · {lastInternalAuditScore}%</span>
+                    ) : null}
+                  </span>
                 </div>
               ) : null}
-            </div>
-          ) : null}
+          </div>
 
-          {step === 2 ? (
-            <div className="audits-wizard-panel">
+          <div className="audits-wizard-panel" hidden={step !== 2}>
               <h3 className="audits-section-title">Audit details</h3>
               <div className="audits-form-grid">
                 <FilterSelect
                   label="Case type"
                   value={caseType}
-                  options={CASE_TYPE_OPTIONS}
-                  placeholder="Select case type"
+                  options={caseTypeOptions}
+                  placeholder={team ? "Select case type" : "Select a team first"}
                   onChange={setCaseType}
                 />
                 <label className="audits-field">
@@ -569,11 +849,18 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
                   placeholder="Optional comments"
                 />
               </label>
-            </div>
-          ) : null}
 
-          {step === 3 ? (
-            <div className="audits-wizard-panel">
+              <label className="audits-field">
+                <span className="audits-field__label">Other information</span>
+                <textarea
+                  className="audits-field__textarea"
+                  rows={3}
+                  value={otherInformation}
+                  onChange={(event) => setOtherInformation(event.target.value)}
+                  placeholder="Optional other information"
+                />
+              </label>
+
               <h3 className="audits-section-title">QA Evaluation</h3>
               <div className="data-table-shell audits-eval-shell audits-eval-shell--modal">
                 <div className="data-table-shell__scroll">
@@ -586,30 +873,21 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
                       </tr>
                     </thead>
                     <tbody>
-                      {metrics.length === 0 ? (
+                      {evaluationMetrics.length === 0 ? (
                         <tr>
                           <td colSpan={3} className="audits-table__empty">
                             No QA metrics available yet.
                           </td>
                         </tr>
                       ) : (
-                        metrics.map((row) => (
+                        evaluationMetrics.map((row) => (
                           <tr key={row.id}>
                             <td>{row.metric}</td>
                             <td>
-                              <select
-                                className="audits-inline-select"
+                              <InlineResultSelect
                                 value={row.result}
-                                onChange={(event) =>
-                                  updateMetric(row.id, { result: event.target.value as EvalResult })
-                                }
-                              >
-                                {RESULT_OPTIONS.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
+                                onChange={(result) => updateMetric(row.id, { result })}
+                              />
                             </td>
                             <td>
                               <input
@@ -660,11 +938,9 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
                   />
                 </label>
               </div>
-            </div>
-          ) : null}
+          </div>
 
-          {step === 4 ? (
-            <div className="audits-wizard-panel">
+          <div className="audits-wizard-panel" hidden={step !== 3}>
               <h3 className="audits-section-title">Final overview</h3>
               <p className="audits-overview__lead">Review everything below before saving.</p>
 
@@ -725,6 +1001,10 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
                   <span className="audits-detail-field__value">{comments || "—"}</span>
                 </div>
                 <div className="audits-detail-field audits-detail-field--wide">
+                  <span className="audits-detail-field__label">Other information</span>
+                  <span className="audits-detail-field__value">{otherInformation || "—"}</span>
+                </div>
+                <div className="audits-detail-field audits-detail-field--wide">
                   <span className="audits-detail-field__label">Resolution note</span>
                   <span className="audits-detail-field__value">{issueResolvedNote || "—"}</span>
                 </div>
@@ -742,18 +1022,18 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
                       </tr>
                     </thead>
                     <tbody>
-                      {metrics.length === 0 ? (
+                      {evaluationMetrics.length === 0 ? (
                         <tr>
                           <td colSpan={4} className="audits-table__empty">
                             No QA metrics available yet.
                           </td>
                         </tr>
                       ) : (
-                        metrics.map((row) => (
+                        evaluationMetrics.map((row) => (
                           <tr key={row.id}>
                             <td>{row.metric}</td>
                             <td>{resultLabel(row.result)}</td>
-                            <td>{row.earned}</td>
+                            <td>{formatEarned(row.earned)}</td>
                             <td>{row.qaNote || "—"}</td>
                           </tr>
                         ))
@@ -762,15 +1042,16 @@ export function NewAuditModal({ open, onClose, reevaluateId = null, onSaved }: N
                   </table>
                 </div>
               </div>
-            </div>
-          ) : null}
+          </div>
         </div>
 
         <div className="audits-wizard-footer">
-          <button type="button" className="audits-btn audits-btn--ghost" onClick={step === 1 ? onClose : goBack}>
-            {step === 1 ? "Cancel" : "Back"}
-          </button>
-          {step < 4 ? (
+          {step > 1 ? (
+            <button type="button" className="audits-btn audits-btn--ghost" onClick={goBack}>
+              Back
+            </button>
+          ) : null}
+          {step < 3 ? (
             <button type="button" className="audits-btn audits-btn--primary" onClick={goNext}>
               Continue
             </button>

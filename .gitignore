@@ -5,6 +5,8 @@ __pycache__/
 db.sqlite3
 *.sqlite3
 .env
+!.env.example
+db_config.py
 .DS_Store
 web/node_modules/
 web/dist/

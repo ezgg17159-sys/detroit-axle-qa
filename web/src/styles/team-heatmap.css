@@ -1,0 +1,115 @@
+.team-heatmap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  padding: 14px 18px 16px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.team-heatmap__table-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.team-heatmap__table-wrap .data-table-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.team-heatmap__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.team-heatmap__table thead th:not(.team-heatmap__sticky) {
+  text-align: center;
+}
+
+.team-heatmap__table thead th:not(.team-heatmap__sticky) .data-table__th-static {
+  text-align: center;
+}
+
+.team-heatmap__table tbody td:not(.team-heatmap__sticky) {
+  text-align: center;
+}
+
+.team-heatmap__table tbody td {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.team-heatmap__sticky {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface-card);
+  min-width: 180px;
+}
+
+.team-heatmap__table thead .team-heatmap__sticky {
+  z-index: 4;
+  background: #e8f4fa;
+}
+
+[data-theme="dark"] .team-heatmap__table thead .team-heatmap__sticky {
+  background: #1a2b44;
+}
+
+.team-heatmap__table tbody tr:hover .team-heatmap__sticky {
+  background: rgba(56, 180, 229, 0.08);
+}
+
+.team-heatmap__agent {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.team-heatmap__cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-primary);
+  background: var(--surface-subtle);
+}
+
+/* Highest → least: red → yellow → blue → green */
+.team-heatmap__cell.is-highest {
+  background: rgba(215, 0, 21, 0.14);
+  color: var(--color-danger);
+}
+
+.team-heatmap__cell.is-mid {
+  background: rgba(214, 158, 0, 0.18);
+  color: #9a6408;
+}
+
+[data-theme="dark"] .team-heatmap__cell.is-mid {
+  background: rgba(214, 158, 0, 0.22);
+  color: #f0c35a;
+}
+
+.team-heatmap__cell.is-before-least {
+  background: rgba(56, 180, 229, 0.16);
+  color: var(--color-accent-deep);
+}
+
+.team-heatmap__cell.is-least {
+  background: rgba(13, 122, 69, 0.14);
+  color: var(--color-success);
+}

@@ -48,19 +48,22 @@
   --dr-mid: #e8f6fc;
   --dr-mid-text: #2a9fc9;
   --dr-end: #38b4e5;
-  --dr-line: rgba(17, 29, 51, 0.1);
+  --dr-line: var(--color-border);
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
   width: min(312px, calc(100vw - 32px));
   padding: 14px;
   border-radius: 12px;
-  background: var(--color-white);
+  background: var(--surface-card);
   border: 1px solid var(--color-border);
-  box-shadow:
-    0 8px 24px rgba(17, 29, 51, 0.08),
-    0 2px 6px rgba(17, 29, 51, 0.04);
+  box-shadow: var(--shadow-card);
   animation: date-range-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+[data-theme="dark"] .date-range__popover {
+  --dr-mid: rgba(56, 180, 229, 0.18);
+  --dr-mid-text: #7ad0f0;
 }
 
 @keyframes date-range-in {
@@ -172,7 +175,7 @@
 }
 
 .date-range__day--muted {
-  color: rgba(17, 29, 51, 0.28);
+  color: var(--text-faint);
 }
 
 .date-range__day--in-range {
@@ -183,7 +186,7 @@
 .date-range__day--start,
 .date-range__day--end {
   background: var(--dr-end);
-  color: var(--color-white);
+  color: var(--text-on-accent);
   font-weight: 600;
   z-index: 1;
   box-shadow: 0 0 0 3px rgba(56, 180, 229, 0.2);

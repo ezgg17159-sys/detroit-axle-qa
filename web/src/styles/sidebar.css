@@ -39,12 +39,38 @@
   z-index: 25;
 }
 
+.sidebar__brand-swap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
 .sidebar__brand-logo {
+  grid-area: 1 / 1;
   display: block;
-  height: 26px;
-  width: auto;
   max-width: 100%;
   object-fit: contain;
+  transition:
+    opacity 280ms ease,
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-width 220ms ease;
+}
+
+.sidebar__brand-logo--full {
+  height: 26px;
+  width: auto;
+  opacity: 1;
+  transform: scale(1);
+}
+
+.sidebar__brand-logo--mark {
+  height: 34px;
+  width: 34px;
+  opacity: 0;
+  transform: scale(0.72);
+  pointer-events: none;
 }
 
 .app-header {
@@ -73,7 +99,7 @@
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--color-white);
+  color: var(--text-on-accent);
   cursor: pointer;
   transition: background 160ms ease;
 }
@@ -93,7 +119,7 @@
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--color-white);
+  color: var(--text-on-accent);
   line-height: 1;
   white-space: nowrap;
   animation: app-title-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -128,7 +154,7 @@
   border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
-  color: var(--color-white);
+  color: var(--text-on-accent);
   cursor: pointer;
   transition: background 160ms ease, border-color 160ms ease;
 }
@@ -232,6 +258,15 @@
   .app-header__title {
     animation: none;
   }
+
+  .sidebar__highlight {
+    transition: none;
+    animation: none;
+  }
+
+  .sidebar__brand-logo {
+    transition: none;
+  }
 }
 
 .sidebar {
@@ -252,6 +287,7 @@
 }
 
 .sidebar__nav {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -260,8 +296,49 @@
   overflow: visible;
 }
 
+.sidebar__highlight {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  border-radius: 0;
+  background: linear-gradient(
+    105deg,
+    rgba(56, 180, 229, 0.1) 0%,
+    rgba(56, 180, 229, 0.28) 42%,
+    rgba(56, 180, 229, 0.14) 58%,
+    rgba(56, 180, 229, 0.22) 100%
+  );
+  background-size: 220% 100%;
+  transition:
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease;
+}
+
+.sidebar__highlight--ready {
+  opacity: 1;
+  animation: sidebar-highlight-flow 6.5s ease-in-out infinite;
+}
+
+@keyframes sidebar-highlight-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
 .sidebar__link {
   position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -277,6 +354,7 @@
   font-weight: 500;
   text-decoration: none;
   white-space: nowrap;
+  background: transparent;
   transition: background 140ms ease, color 140ms ease;
 }
 
@@ -286,18 +364,8 @@
 }
 
 .sidebar__link--active {
-  background: rgba(56, 180, 229, 0.2);
+  background: transparent;
   color: #ffffff;
-}
-
-.sidebar__link--active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--color-accent);
 }
 
 .sidebar__link--active .sidebar__link-icon {
@@ -419,7 +487,7 @@
 }
 
 .sidebar__group--active .sidebar__link--parent {
-  background: rgba(56, 180, 229, 0.2);
+  background: transparent;
 }
 
 /* Collapsed: icon rail, centered */
@@ -432,7 +500,18 @@
   padding: 0;
 }
 
-.app-shell--sidebar-collapsed .sidebar__brand-logo,
+.app-shell--sidebar-collapsed .sidebar__brand-logo--full {
+  opacity: 0;
+  transform: scale(0.72);
+  pointer-events: none;
+}
+
+.app-shell--sidebar-collapsed .sidebar__brand-logo--mark {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
 .app-shell--sidebar-collapsed .sidebar__link-label {
   display: none;
 }

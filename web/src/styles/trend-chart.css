@@ -1,0 +1,96 @@
+/* Shared professional trend charts — line only, no gradients, no axis numbers */
+
+.trend-chart {
+  --trend-line: var(--color-accent);
+  --trend-guide: color-mix(in srgb, var(--color-muted) 20%, transparent);
+  --trend-base: color-mix(in srgb, var(--color-muted) 42%, transparent);
+  --trend-empty: var(--color-muted);
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  width: 100%;
+  min-height: 0;
+}
+
+.trend-chart--wide {
+  min-height: 220px;
+}
+
+.trend-chart__frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.trend-chart__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.trend-chart__guide {
+  fill: none;
+  stroke: var(--trend-guide);
+  stroke-width: 1;
+}
+
+.trend-chart__baseline {
+  fill: none;
+  stroke: var(--trend-base);
+  stroke-width: 1;
+}
+
+.trend-chart__line {
+  fill: none;
+  stroke: var(--trend-line);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: var(--trend-len, 1);
+  stroke-dashoffset: var(--trend-len, 1);
+}
+
+.trend-chart--ready .trend-chart__line {
+  animation: trend-draw 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.trend-chart__end {
+  fill: var(--trend-line);
+  opacity: 0;
+}
+
+.trend-chart--ready .trend-chart__end {
+  animation: trend-end 0.28s ease 0.62s forwards;
+}
+
+.trend-chart__empty {
+  fill: var(--trend-empty);
+  font-family: var(--font-text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+@keyframes trend-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes trend-end {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trend-chart__line {
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+
+  .trend-chart__end {
+    opacity: 1;
+    animation: none;
+  }
+}

@@ -15,17 +15,35 @@ from db_config import DB_CONFIG, EXTERNAL_SCHEMA, USE_EXTERNAL_DB  # noqa: E402
 
 
 def external_db_enabled() -> bool:
-    return bool(USE_EXTERNAL_DB)
+    if not USE_EXTERNAL_DB:
+        return False
+    required = ("dbname", "user", "password", "host")
+    return all(str(DB_CONFIG.get(key) or "").strip() for key in required)
 
 
 def schema_name() -> str:
     return EXTERNAL_SCHEMA
 
 
+def connection_status() -> dict[str, Any]:
+    return {
+        "enabled": bool(USE_EXTERNAL_DB),
+        "configured": external_db_enabled(),
+        "schema": EXTERNAL_SCHEMA,
+        "host": DB_CONFIG.get("host") or "",
+        "port": DB_CONFIG.get("port") or "",
+        "dbname": DB_CONFIG.get("dbname") or "",
+    }
+
+
 @contextmanager
 def external_connection() -> Iterator[Any]:
     if not USE_EXTERNAL_DB:
         raise RuntimeError("External DB is disconnected (USE_EXTERNAL_DB=False in db_config.py).")
+    if not external_db_enabled():
+        raise RuntimeError(
+            "External DB credentials are missing. Fill the project-root .env (QA_DB_*)."
+        )
 
     try:
         import psycopg2
@@ -40,6 +58,8 @@ def external_connection() -> Iterator[Any]:
         host=DB_CONFIG["host"],
         port=DB_CONFIG["port"],
         cursor_factory=RealDictCursor,
+        connect_timeout=int(DB_CONFIG.get("connect_timeout") or 8),
+        sslmode=str(DB_CONFIG.get("sslmode") or "prefer"),
     )
     try:
         yield conn

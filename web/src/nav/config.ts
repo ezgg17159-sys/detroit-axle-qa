@@ -8,6 +8,7 @@ import {
   OverviewIcon,
   ProductionIcon,
   TrackingIcon,
+  UserIcon,
 } from "../icons/NavIcons";
 
 type IconProps = { className?: string; size?: number };
@@ -48,8 +49,8 @@ export const navItems: NavItem[] = [
     icon: CasesIcon,
     basePath: "/cases-and-metrics",
     children: [
-      { to: "/cases-and-metrics/cases", label: "Cases" },
       { to: "/cases-and-metrics/metrics", label: "Metrics" },
+      { to: "/cases-and-metrics/cases", label: "Cases" },
     ],
   },
   {
@@ -57,9 +58,7 @@ export const navItems: NavItem[] = [
     icon: ProductionIcon,
     basePath: "/production",
     children: [
-      { to: "/production/calls", label: "Calls" },
-      { to: "/production/tickets", label: "Tickets" },
-      { to: "/production/sales", label: "Sales" },
+      { to: "/production/team", label: "Team production" },
     ],
   },
   {
@@ -68,7 +67,7 @@ export const navItems: NavItem[] = [
     basePath: "/monitoring-and-feedbacks",
     children: [
       { to: "/monitoring-and-feedbacks/monitoring", label: "Monitoring" },
-      { to: "/monitoring-and-feedbacks/feedbacks", label: "Feedbacks" },
+      { to: "/monitoring-and-feedbacks/feedbacks", label: "Agent Feedback" },
     ],
   },
   {
@@ -86,6 +85,15 @@ export const navItems: NavItem[] = [
     basePath: "/team-tracking",
     children: [
       { to: "/team-tracking/qa-team-tracking", label: "QA Team Tracking" },
+    ],
+  },
+  {
+    label: "Manage Users",
+    icon: UserIcon,
+    basePath: "/manage-users",
+    children: [
+      { to: "/manage-users/users", label: "Users" },
+      { to: "/manage-users/permissions", label: "Permissions" },
     ],
   },
 ];

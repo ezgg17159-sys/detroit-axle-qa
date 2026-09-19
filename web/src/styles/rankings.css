@@ -166,7 +166,7 @@
   padding: 16px 18px 14px;
   border-radius: 12px;
   background: var(--surface-card);
-  border: 1px solid rgba(17, 29, 51, 0.08);
+  border: 1px solid var(--color-border);
 }
 
 .rankings-podium--1 {
@@ -247,7 +247,7 @@
   gap: 0;
   margin-top: auto;
   padding-top: 12px;
-  border-top: 1px solid rgba(17, 29, 51, 0.08);
+  border-top: 1px solid var(--color-border);
 }
 
 .rankings-podium__stat {
@@ -261,7 +261,7 @@
 .rankings-podium__divider {
   width: 1px;
   margin: 0 12px;
-  background: rgba(17, 29, 51, 0.1);
+  background: var(--surface-subtle-strong);
   align-self: stretch;
 }
 

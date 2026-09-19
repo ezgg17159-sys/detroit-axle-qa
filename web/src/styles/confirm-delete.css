@@ -1,0 +1,80 @@
+.confirm-delete {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--surface-overlay);
+  animation: confirm-delete-in 160ms ease both;
+}
+
+.confirm-delete__dialog {
+  width: min(420px, 100%);
+  padding: 22px 22px 18px;
+  border-radius: 16px;
+  background: var(--surface-card);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-modal);
+}
+
+.confirm-delete__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-navy);
+}
+
+.confirm-delete__desc {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.confirm-delete__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.confirm-delete__btn {
+  appearance: none;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirm-delete__btn--ghost {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-navy);
+}
+
+.confirm-delete__btn--ghost:hover {
+  background: var(--surface-subtle);
+}
+
+.confirm-delete__btn--danger {
+  border: none;
+  background: var(--color-danger);
+  color: var(--text-on-accent);
+}
+
+.confirm-delete__btn--danger:hover {
+  filter: brightness(1.05);
+}
+
+@keyframes confirm-delete-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
