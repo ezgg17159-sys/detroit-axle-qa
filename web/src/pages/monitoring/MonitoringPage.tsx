@@ -788,9 +788,7 @@ export function MonitoringPage() {
       });
       if (payload.connected) {
         const live = payload.items;
-        const liveIds = new Set(live.map((row) => row.id));
-        const localOnly = listMonitoring().filter((row) => !liveIds.has(row.id));
-        setRows([...live, ...localOnly]);
+        setRows(live);
       } else {
         setRows(listMonitoring());
       }

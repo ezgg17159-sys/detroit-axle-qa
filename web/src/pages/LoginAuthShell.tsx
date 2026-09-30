@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
+import { surfaceLabel } from "../theme/surface";
+
 const HERO_AUTO_MS = 20_000;
 
 const HERO_SLIDES = [
@@ -169,7 +171,7 @@ export function LoginAuthShell({ titleId, title, children }: LoginAuthShellProps
           ))}
         </div>
 
-        <p className="login-credit">Created by Rashed Kattan</p>
+        <p className="login-credit">{surfaceLabel()}</p>
       </section>
 
       <aside className="login-side" aria-labelledby={titleId}>

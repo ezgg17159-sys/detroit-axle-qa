@@ -246,3 +246,77 @@ export function formatAuditDate(iso: string): string {
     year: "numeric",
   });
 }
+
+export type ShareAuditEmailPayload = {
+  auditId: string;
+  agentId: string;
+  agentName: string;
+  agentEmail: string;
+  toEmail: string;
+  team: AuditTeam;
+  teamLabel: string;
+  score: string;
+  caseType: string;
+  auditDate: string;
+  auditDateLabel: string;
+  auditUrl: string;
+  sharedBy: string;
+};
+
+function employeeAuditDeepLink(auditId: string): string {
+  const origin =
+    (typeof window !== "undefined" && window.location.origin) ||
+    String(import.meta.env.VITE_APP_URL || "").replace(/\/$/, "") ||
+    "http://127.0.0.1:5173";
+  return `${origin}/employee/audits/${encodeURIComponent(auditId)}`;
+}
+
+export async function buildShareAuditEmailPayload(
+  audit: AuditRecord,
+  options: { sharedBy: string },
+): Promise<ShareAuditEmailPayload> {
+  const { listManagedUsers } = await import("./managedUsers");
+  const profile =
+    listManagedUsers().find(
+      (row) =>
+        (audit.agentId && row.employeeId === audit.agentId) ||
+        row.agentName.trim().toLowerCase() === audit.agentName.trim().toLowerCase() ||
+        row.alias.trim().toLowerCase() === (audit.alias || "").trim().toLowerCase(),
+    ) ?? null;
+  const agentEmail = String(profile?.email || "").trim().toLowerCase();
+  return {
+    auditId: audit.id,
+    agentId: audit.agentId,
+    agentName: audit.agentName || audit.alias || "Agent",
+    agentEmail,
+    toEmail: agentEmail,
+    team: audit.team,
+    teamLabel: teamLabel(audit.team),
+    score: audit.qualityScore || audit.score || "—",
+    caseType: caseTypeLabel(audit.caseType),
+    auditDate: audit.date,
+    auditDateLabel: formatAuditDate(audit.date),
+    auditUrl: employeeAuditDeepLink(audit.id),
+    sharedBy: options.sharedBy.trim() || "QA",
+  };
+}
+
+export async function queueShareAuditEmail(
+  audit: AuditRecord,
+  sharedBy: string,
+): Promise<ShareAuditEmailPayload & { emailTestMode?: boolean }> {
+  const payload = await buildShareAuditEmailPayload(audit, { sharedBy });
+  if (!payload.agentEmail) {
+    throw new Error("This agent has no work email on their managed-user profile.");
+  }
+  const { triggerPowerAutomate } = await import("./externalApi");
+  const result = await triggerPowerAutomate(
+    "share-audit",
+    payload as unknown as Record<string, unknown>,
+  );
+  return {
+    ...payload,
+    toEmail: String(result.toEmail || payload.toEmail || payload.agentEmail || ""),
+    emailTestMode: Boolean(result.emailTestMode),
+  };
+}

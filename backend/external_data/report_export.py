@@ -4,11 +4,50 @@ from __future__ import annotations
 
 from calendar import month_abbr
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from .db import external_connection, schema_name
 from .queries import SLUG_TO_DB_TEAM
+
+
+def _week_index(day: int) -> int:
+    """Calendar week-of-month: 1–7 → 1, 8–14 → 2, 15–21 → 3, 22–28 → 4, 29–31 → 5."""
+    if day <= 7:
+        return 1
+    if day <= 14:
+        return 2
+    if day <= 21:
+        return 3
+    if day <= 28:
+        return 4
+    return 5
+
+
+def _week_span(week: int) -> str:
+    return {1: "1-7", 2: "8-14", 3: "15-21", 4: "22-28", 5: "29-31"}[week]
+
+
+def _week_key(value: date) -> str:
+    return f"{value.year:04d}-{value.month:02d}-W{_week_index(value.day)}"
+
+
+def _week_label(value: date) -> str:
+    return f"{month_abbr[value.month].upper()} {_week_span(_week_index(value.day))}"
+
+
+def _weeks_in_range(start: date, end: date) -> list[dict[str, str]]:
+    """Unique week buckets (1-7 / 8-14 / …) covered by the date range."""
+    weeks: list[dict[str, str]] = []
+    seen: set[str] = set()
+    cursor = start
+    while cursor <= end:
+        key = _week_key(cursor)
+        if key not in seen:
+            seen.add(key)
+            weeks.append({"key": key, "label": _week_label(cursor)})
+        cursor += timedelta(days=1)
+    return weeks
 
 
 def _month_key(value: date) -> str:
@@ -35,6 +74,11 @@ def _months_in_range(start: date, end: date) -> list[dict[str, str]]:
         else:
             month += 1
     return months
+
+
+def _normalize_period(period: str | None) -> str:
+    raw = (period or "weeks").strip().lower()
+    return "months" if raw in {"month", "months", "monthly"} else "weeks"
 
 
 def _pct(value: float | None, digits: int = 1) -> str:
@@ -90,7 +134,10 @@ def _team_pretty(team: str) -> str:
 
 
 def _range_label(start: date, end: date) -> str:
-    return f"{_month_label(start)} – {_month_label(end)} {end.year}"
+    return (
+        f"{month_abbr[start.month].upper()} {start.day} – "
+        f"{month_abbr[end.month].upper()} {end.day} {end.year}"
+    )
 
 
 def _avg(values: list[float]) -> float | None:
@@ -98,15 +145,15 @@ def _avg(values: list[float]) -> float | None:
 
 
 def _labeled_best_worst(
-    monthly: dict[str, float | None],
-    month_label_by_key: dict[str, str],
+    weekly: dict[str, float | None],
+    week_label_by_key: dict[str, str],
 ) -> tuple[str, str]:
-    scored = [(key, value) for key, value in monthly.items() if value is not None]
+    scored = [(key, value) for key, value in weekly.items() if value is not None]
     if not scored:
         return "-", "-"
     best_k = max(scored, key=lambda item: item[1])[0]
     worst_k = min(scored, key=lambda item: item[1])[0]
-    return month_label_by_key.get(best_k, best_k), month_label_by_key.get(worst_k, worst_k)
+    return week_label_by_key.get(best_k, best_k), week_label_by_key.get(worst_k, worst_k)
 
 
 def _empty_result_bucket() -> dict[str, int]:
@@ -114,33 +161,33 @@ def _empty_result_bucket() -> dict[str, int]:
 
 
 def _build_criteria_block(
-    crit_month: dict[str, dict[str, dict[str, int]]],
+    crit_week: dict[str, dict[str, dict[str, int]]],
     crit_type: dict[str, str],
     *,
-    month_keys: list[str],
-    month_label_by_key: dict[str, str],
+    week_keys: list[str],
+    week_label_by_key: dict[str, str],
     team_pretty: str,
 ) -> dict[str, Any]:
-    first_key = month_keys[0] if month_keys else ""
-    last_key = month_keys[-1] if month_keys else ""
+    first_key = week_keys[0] if week_keys else ""
+    last_key = week_keys[-1] if week_keys else ""
     criteria_rows: list[dict[str, Any]] = []
     overall_pass_rates: list[float] = []
 
-    for metric, by_month in sorted(crit_month.items(), key=lambda item: item[0].lower()):
+    for metric, by_week in sorted(crit_week.items(), key=lambda item: item[0].lower()):
         totals = _empty_result_bucket()
-        monthly_rates: dict[str, float | None] = {}
-        for key in month_keys:
-            bucket = by_month.get(key) or _empty_result_bucket()
+        weekly_rates: dict[str, float | None] = {}
+        for key in week_keys:
+            bucket = by_week.get(key) or _empty_result_bucket()
             for field in totals:
                 totals[field] += bucket[field]
-            monthly_rates[key] = (
+            weekly_rates[key] = (
                 (bucket["pass"] / bucket["total"]) * 100.0 if bucket["total"] else None
             )
         overall_rate = (totals["pass"] / totals["total"] * 100.0) if totals["total"] else None
         if overall_rate is not None:
             overall_pass_rates.append(overall_rate)
-        first = monthly_rates.get(first_key)
-        last = monthly_rates.get(last_key)
+        first = weekly_rates.get(first_key)
+        last = weekly_rates.get(last_key)
         criteria_rows.append(
             {
                 "criterion": metric,
@@ -151,7 +198,7 @@ def _build_criteria_block(
                 "fail": totals["fail"],
                 "total": totals["total"],
                 "monthly": {
-                    month_label_by_key[key]: _pct(monthly_rates[key]) for key in month_keys
+                    week_label_by_key[key]: _pct(weekly_rates[key]) for key in week_keys
                 },
                 "trend": _trend_arrow(first, last),
                 "delta": _delta_pct(first, last),
@@ -175,26 +222,26 @@ def _build_criteria_block(
 
 
 def _build_case_types_block(
-    case_month_counts: dict[str, dict[str, int]],
-    case_month_scores: dict[str, dict[str, list[float]]],
+    case_week_counts: dict[str, dict[str, int]],
+    case_week_scores: dict[str, dict[str, list[float]]],
     case_total_scores: dict[str, list[float]],
     *,
-    month_keys: list[str],
-    month_label_by_key: dict[str, str],
+    week_keys: list[str],
+    week_label_by_key: dict[str, str],
 ) -> dict[str, Any]:
-    total_case_evals = sum(sum(counts.values()) for counts in case_month_counts.values()) or 1
+    total_case_evals = sum(sum(counts.values()) for counts in case_week_counts.values()) or 1
     case_rows: list[dict[str, Any]] = []
-    for case_name, counts in case_month_counts.items():
+    for case_name, counts in case_week_counts.items():
         total = sum(counts.values())
         scores = case_total_scores.get(case_name, [])
         overall = _avg(scores)
-        monthly_score = {
-            key: _avg(case_month_scores[case_name].get(key, [])) for key in month_keys
+        weekly_score = {
+            key: _avg(case_week_scores[case_name].get(key, [])) for key in week_keys
         }
-        best_label = _labeled_best_worst(monthly_score, month_label_by_key)[0]
+        best_label = _labeled_best_worst(weekly_score, week_label_by_key)[0]
         if best_label == "-":
-            vol_map = {key: float(counts.get(key, 0)) for key in month_keys}
-            best_label = _labeled_best_worst(vol_map, month_label_by_key)[0]
+            vol_map = {key: float(counts.get(key, 0)) for key in week_keys}
+            best_label = _labeled_best_worst(vol_map, week_label_by_key)[0]
         case_rows.append(
             {
                 "caseType": case_name,
@@ -202,10 +249,10 @@ def _build_case_types_block(
                 "share": _pct((total / total_case_evals) * 100.0),
                 "avgScore": _pct(overall),
                 "monthlyEvals": {
-                    month_label_by_key[key]: counts.get(key, 0) for key in month_keys
+                    week_label_by_key[key]: counts.get(key, 0) for key in week_keys
                 },
                 "monthlyScore": {
-                    month_label_by_key[key]: _pct(monthly_score[key]) for key in month_keys
+                    week_label_by_key[key]: _pct(weekly_score[key]) for key in week_keys
                 },
                 "bestMonth": best_label,
                 "_total": total,
@@ -228,12 +275,19 @@ def fetch_report_export(
     end: date,
     team: str = "all",
     agent_ids: list[str] | None = None,
+    period: str = "weeks",
 ) -> dict[str, Any]:
     schema = schema_name()
     agent_ids = [item for item in (agent_ids or []) if item]
-    months = _months_in_range(start, end)
-    month_keys = [item["key"] for item in months]
-    month_label_by_key = {item["key"]: item["label"] for item in months}
+    period_mode = _normalize_period(period)
+    if period_mode == "months":
+        periods = _months_in_range(start, end)
+        period_key = _month_key
+    else:
+        periods = _weeks_in_range(start, end)
+        period_key = _week_key
+    week_keys = [item["key"] for item in periods]
+    week_label_by_key = {item["key"]: item["label"] for item in periods}
 
     clauses = ["a.audit_date::date >= %s", "a.audit_date::date <= %s"]
     params: list[Any] = [start, end]
@@ -247,6 +301,14 @@ def fetch_report_export(
         params.append(tuple(agent_ids))
 
     where_sql = " AND ".join(clauses)
+
+    # Team baseline (full team in range — not limited to selected agents).
+    team_clauses = ["a.audit_date::date >= %s", "a.audit_date::date <= %s"]
+    team_params: list[Any] = [start, end]
+    if team and team != "all":
+        team_clauses.append("LOWER(COALESCE(a.team, '')) = LOWER(%s)")
+        team_params.append(SLUG_TO_DB_TEAM.get(team, team))
+    team_where_sql = " AND ".join(team_clauses)
 
     with external_connection() as conn:
         with conn.cursor() as cur:
@@ -289,28 +351,62 @@ def fetch_report_export(
             )
             audits = cur.fetchall()
 
-    agent_month_scores: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
-    agent_meta: dict[str, dict[str, str]] = {}
-    volume_month: dict[str, int] = defaultdict(int)
-    score_month: dict[str, list[float]] = defaultdict(list)
-    agent_month_vol: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+            cur.execute(
+                f"""
+                SELECT
+                  COALESCE(a.team, '') AS team,
+                  a.audit_date::date AS audit_day,
+                  a.quality_score
+                FROM {schema}.audits a
+                WHERE {team_where_sql}
+                  AND a.quality_score IS NOT NULL
+                """,
+                team_params,
+            )
+            team_score_rows = cur.fetchall()
 
-    crit_month: dict[str, dict[str, dict[str, int]]] = defaultdict(
+    team_all_scores: dict[str, list[float]] = defaultdict(list)
+    team_week_scores: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    for row in team_score_rows:
+        team_raw = str(row.get("team") or "").strip() or "Unknown"
+        day = row.get("audit_day")
+        if not isinstance(day, date):
+            continue
+        try:
+            score_f = float(row.get("quality_score"))
+        except (TypeError, ValueError):
+            continue
+        team_all_scores[team_raw.lower()].append(score_f)
+        team_week_scores[team_raw.lower()][period_key(day)].append(score_f)
+
+    pooled_scores = [score for values in team_all_scores.values() for score in values]
+    pooled_week: dict[str, list[float]] = defaultdict(list)
+    for by_week in team_week_scores.values():
+        for key, values in by_week.items():
+            pooled_week[key].extend(values)
+
+    agent_week_scores: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    agent_meta: dict[str, dict[str, str]] = {}
+    volume_week: dict[str, int] = defaultdict(int)
+    score_week: dict[str, list[float]] = defaultdict(list)
+    agent_week_vol: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+
+    crit_week: dict[str, dict[str, dict[str, int]]] = defaultdict(
         lambda: defaultdict(_empty_result_bucket)
     )
     crit_type: dict[str, str] = {}
-    agent_crit_month: dict[str, dict[str, dict[str, dict[str, int]]]] = defaultdict(
+    agent_crit_week: dict[str, dict[str, dict[str, dict[str, int]]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(_empty_result_bucket))
     )
     agent_crit_type: dict[str, dict[str, str]] = defaultdict(dict)
 
-    case_month_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    case_month_scores: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    case_week_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    case_week_scores: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     case_total_scores: dict[str, list[float]] = defaultdict(list)
-    agent_case_month_counts: dict[str, dict[str, dict[str, int]]] = defaultdict(
+    agent_case_week_counts: dict[str, dict[str, dict[str, int]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(int))
     )
-    agent_case_month_scores: dict[str, dict[str, dict[str, list[float]]]] = defaultdict(
+    agent_case_week_scores: dict[str, dict[str, dict[str, list[float]]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(list))
     )
     agent_case_total_scores: dict[str, dict[str, list[float]]] = defaultdict(
@@ -325,11 +421,11 @@ def fetch_report_export(
         day = row.get("audit_day")
         if not isinstance(day, date):
             continue
-        mkey = _month_key(day)
-        volume_month[mkey] += 1
+        wkey = period_key(day)
+        volume_week[wkey] += 1
 
         if agent_id:
-            agent_month_vol[agent_id][mkey] += 1
+            agent_week_vol[agent_id][wkey] += 1
             agent_meta[agent_id] = {"name": name, "alias": alias, "team": team_raw}
 
         score_f: float | None = None
@@ -341,19 +437,19 @@ def fetch_report_export(
                 score_f = None
 
         if score_f is not None:
-            score_month[mkey].append(score_f)
+            score_week[wkey].append(score_f)
             if agent_id:
-                agent_month_scores[agent_id][mkey].append(score_f)
+                agent_week_scores[agent_id][wkey].append(score_f)
 
         case_type = str(row.get("case_type") or "").strip() or "Unspecified"
-        case_month_counts[case_type][mkey] += 1
+        case_week_counts[case_type][wkey] += 1
         if score_f is not None:
-            case_month_scores[case_type][mkey].append(score_f)
+            case_week_scores[case_type][wkey].append(score_f)
             case_total_scores[case_type].append(score_f)
         if agent_id:
-            agent_case_month_counts[agent_id][case_type][mkey] += 1
+            agent_case_week_counts[agent_id][case_type][wkey] += 1
             if score_f is not None:
-                agent_case_month_scores[agent_id][case_type][mkey].append(score_f)
+                agent_case_week_scores[agent_id][case_type][wkey].append(score_f)
                 agent_case_total_scores[agent_id][case_type].append(score_f)
 
         details = row.get("score_details")
@@ -369,7 +465,7 @@ def fetch_report_export(
             result = _map_result(item.get("result"))
             if result == "n/a":
                 continue
-            bucket = crit_month[metric][mkey]
+            bucket = crit_week[metric][wkey]
             bucket["total"] += 1
             if result == "pass":
                 bucket["pass"] += 1
@@ -380,7 +476,7 @@ def fetch_report_export(
             crit_type[metric] = type_label
 
             if agent_id:
-                agent_bucket = agent_crit_month[agent_id][metric][mkey]
+                agent_bucket = agent_crit_week[agent_id][metric][wkey]
                 agent_bucket["total"] += 1
                 if result == "pass":
                     agent_bucket["pass"] += 1
@@ -390,15 +486,15 @@ def fetch_report_export(
                     agent_bucket["fail"] += 1
                 agent_crit_type[agent_id][metric] = type_label
 
-    all_scores = [score for values in score_month.values() for score in values]
+    all_scores = [score for values in score_week.values() for score in values]
     total_audits = len(audits)
     agents_evaluated = len({aid for aid in agent_meta if aid})
     avg_score = _avg(all_scores)
 
-    monthly_avg = {key: _avg(score_month.get(key, [])) for key in month_keys}
-    monthly_vol = {key: float(volume_month.get(key, 0)) for key in month_keys}
-    first_key = month_keys[0] if month_keys else ""
-    last_key = month_keys[-1] if month_keys else ""
+    weekly_avg = {key: _avg(score_week.get(key, [])) for key in week_keys}
+    weekly_vol = {key: float(volume_week.get(key, 0)) for key in week_keys}
+    first_key = week_keys[0] if week_keys else ""
+    last_key = week_keys[-1] if week_keys else ""
     team_pretty = _team_pretty(team)
     if agent_ids:
         n = len(agent_ids)
@@ -411,58 +507,83 @@ def fetch_report_export(
     master_trend = [
         {
             "metric": f"{scope_pretty} — Avg Score",
-            "values": {month_label_by_key[key]: _pct(monthly_avg[key]) for key in month_keys},
-            "trend": _trend_arrow(monthly_avg.get(first_key), monthly_avg.get(last_key)),
-            "bestMonth": _labeled_best_worst(monthly_avg, month_label_by_key)[0],
-            "worstMonth": _labeled_best_worst(monthly_avg, month_label_by_key)[1],
+            "values": {week_label_by_key[key]: _pct(weekly_avg[key]) for key in week_keys},
+            "trend": _trend_arrow(weekly_avg.get(first_key), weekly_avg.get(last_key)),
+            "bestMonth": _labeled_best_worst(weekly_avg, week_label_by_key)[0],
+            "worstMonth": _labeled_best_worst(weekly_avg, week_label_by_key)[1],
         },
         {
             "metric": f"{scope_pretty} — Volume",
-            "values": {month_label_by_key[key]: _num(monthly_vol[key]) for key in month_keys},
-            "trend": _trend_arrow(monthly_vol.get(first_key), monthly_vol.get(last_key)),
-            "bestMonth": _labeled_best_worst(monthly_vol, month_label_by_key)[0],
-            "worstMonth": _labeled_best_worst(monthly_vol, month_label_by_key)[1],
+            "values": {week_label_by_key[key]: _num(weekly_vol[key]) for key in week_keys},
+            "trend": _trend_arrow(weekly_vol.get(first_key), weekly_vol.get(last_key)),
+            "bestMonth": _labeled_best_worst(weekly_vol, week_label_by_key)[0],
+            "worstMonth": _labeled_best_worst(weekly_vol, week_label_by_key)[1],
         },
     ]
 
+    def _team_avg_for(agent_team: str) -> float | None:
+        key = (agent_team or "").strip().lower()
+        if key and key in team_all_scores:
+            return _avg(team_all_scores[key])
+        return _avg(pooled_scores)
+
+    def _team_week_avg_for(agent_team: str, wkey: str) -> float | None:
+        key = (agent_team or "").strip().lower()
+        if key and key in team_week_scores:
+            return _avg(team_week_scores[key].get(wkey, []))
+        return _avg(pooled_week.get(wkey, []))
+
     agents_out: list[dict[str, Any]] = []
-    for agent_id, months_map in agent_month_scores.items():
-        monthly_avgs = {key: _avg(months_map.get(key, [])) for key in month_keys}
-        overall = _avg([value for value in monthly_avgs.values() if value is not None])
-        first = monthly_avgs.get(first_key)
-        last = monthly_avgs.get(last_key)
-        meta = agent_meta.get(agent_id, {"name": agent_id, "alias": agent_id})
+    for agent_id, weeks_map in agent_week_scores.items():
+        weekly_avgs = {key: _avg(weeks_map.get(key, [])) for key in week_keys}
+        overall = _avg([value for value in weekly_avgs.values() if value is not None])
+        first = weekly_avgs.get(first_key)
+        last = weekly_avgs.get(last_key)
+        meta = agent_meta.get(agent_id, {"name": agent_id, "alias": agent_id, "team": ""})
+        team_avg = _team_avg_for(meta.get("team", ""))
         agents_out.append(
             {
                 "name": meta["name"],
                 "alias": meta["alias"],
+                "team": meta.get("team", ""),
                 "overallAvg": _pct(overall),
+                "teamAvg": _pct(team_avg),
+                "vsTeam": (
+                    _delta_pct(team_avg, overall)
+                    if overall is not None and team_avg is not None
+                    else "-"
+                ),
                 "monthly": {
-                    month_label_by_key[key]: _pct(monthly_avgs[key]) for key in month_keys
+                    week_label_by_key[key]: _pct(weekly_avgs[key]) for key in week_keys
+                },
+                "teamWeekly": {
+                    week_label_by_key[key]: _pct(
+                        _team_week_avg_for(meta.get("team", ""), key)
+                    )
+                    for key in week_keys
                 },
                 "trend": _trend_arrow(first, last),
                 "delta": _delta_pct(first, last),
-                "bestMonth": _labeled_best_worst(monthly_avgs, month_label_by_key)[0],
+                "bestMonth": _labeled_best_worst(weekly_avgs, week_label_by_key)[0],
             }
         )
     agents_out.sort(key=lambda row: row["name"].lower())
 
     criteria = _build_criteria_block(
-        crit_month,
+        crit_week,
         crit_type,
-        month_keys=month_keys,
-        month_label_by_key=month_label_by_key,
+        week_keys=week_keys,
+        week_label_by_key=week_label_by_key,
         team_pretty=team_pretty,
     )
     case_types = _build_case_types_block(
-        case_month_counts,
-        case_month_scores,
+        case_week_counts,
+        case_week_scores,
         case_total_scores,
-        month_keys=month_keys,
-        month_label_by_key=month_label_by_key,
+        week_keys=week_keys,
+        week_label_by_key=week_label_by_key,
     )
 
-    # When specific agents are filtered, break sheets out per agent.
     criteria_by_agent: list[dict[str, Any]] = []
     case_types_by_agent: list[dict[str, Any]] = []
     master_by_agent: list[dict[str, Any]] = []
@@ -472,20 +593,20 @@ def fetch_report_export(
             key=lambda aid: agent_meta.get(aid, {}).get("name", aid).lower(),
         )
         for agent_id in ordered_agents:
-            meta = agent_meta.get(agent_id, {"name": agent_id, "alias": agent_id})
+            meta = agent_meta.get(agent_id, {"name": agent_id, "alias": agent_id, "team": ""})
             agent_criteria = _build_criteria_block(
-                agent_crit_month.get(agent_id, {}),
+                agent_crit_week.get(agent_id, {}),
                 agent_crit_type.get(agent_id, {}),
-                month_keys=month_keys,
-                month_label_by_key=month_label_by_key,
+                week_keys=week_keys,
+                week_label_by_key=week_label_by_key,
                 team_pretty=team_pretty,
             )
             agent_cases = _build_case_types_block(
-                agent_case_month_counts.get(agent_id, {}),
-                agent_case_month_scores.get(agent_id, {}),
+                agent_case_week_counts.get(agent_id, {}),
+                agent_case_week_scores.get(agent_id, {}),
                 agent_case_total_scores.get(agent_id, {}),
-                month_keys=month_keys,
-                month_label_by_key=month_label_by_key,
+                week_keys=week_keys,
+                week_label_by_key=week_label_by_key,
             )
             criteria_by_agent.append(
                 {
@@ -505,56 +626,84 @@ def fetch_report_export(
             )
 
             agent_vol_map = {
-                key: float(agent_month_vol.get(agent_id, {}).get(key, 0)) for key in month_keys
+                key: float(agent_week_vol.get(agent_id, {}).get(key, 0)) for key in week_keys
             }
             agent_avg_map = {
-                key: _avg(agent_month_scores.get(agent_id, {}).get(key, [])) for key in month_keys
+                key: _avg(agent_week_scores.get(agent_id, {}).get(key, [])) for key in week_keys
             }
             agent_all_scores = [
                 score
-                for values in agent_month_scores.get(agent_id, {}).values()
+                for values in agent_week_scores.get(agent_id, {}).values()
                 for score in values
             ]
             agent_total = int(sum(agent_vol_map.values()))
             agent_name = meta["name"]
+            team_avg = _team_avg_for(meta.get("team", ""))
+            agent_avg = _avg(agent_all_scores)
+            team_week_map = {
+                key: _team_week_avg_for(meta.get("team", ""), key) for key in week_keys
+            }
             master_by_agent.append(
                 {
                     "agentId": agent_id,
                     "name": agent_name,
                     "alias": meta["alias"],
+                    "team": meta.get("team", ""),
                     "totalAudits": agent_total,
-                    "avgScore": _pct(_avg(agent_all_scores)),
+                    "avgScore": _pct(agent_avg),
+                    "teamAvg": _pct(team_avg),
+                    "vsTeam": (
+                        _delta_pct(team_avg, agent_avg)
+                        if agent_avg is not None and team_avg is not None
+                        else "-"
+                    ),
                     "masterTrend": [
                         {
                             "metric": f"{agent_name} — Avg Score",
                             "values": {
-                                month_label_by_key[key]: _pct(agent_avg_map[key])
-                                for key in month_keys
+                                week_label_by_key[key]: _pct(agent_avg_map[key])
+                                for key in week_keys
                             },
                             "trend": _trend_arrow(
                                 agent_avg_map.get(first_key), agent_avg_map.get(last_key)
                             ),
                             "bestMonth": _labeled_best_worst(
-                                agent_avg_map, month_label_by_key
+                                agent_avg_map, week_label_by_key
                             )[0],
                             "worstMonth": _labeled_best_worst(
-                                agent_avg_map, month_label_by_key
+                                agent_avg_map, week_label_by_key
+                            )[1],
+                        },
+                        {
+                            "metric": f"{agent_name} — Team Avg",
+                            "values": {
+                                week_label_by_key[key]: _pct(team_week_map[key])
+                                for key in week_keys
+                            },
+                            "trend": _trend_arrow(
+                                team_week_map.get(first_key), team_week_map.get(last_key)
+                            ),
+                            "bestMonth": _labeled_best_worst(
+                                team_week_map, week_label_by_key
+                            )[0],
+                            "worstMonth": _labeled_best_worst(
+                                team_week_map, week_label_by_key
                             )[1],
                         },
                         {
                             "metric": f"{agent_name} — Volume",
                             "values": {
-                                month_label_by_key[key]: _num(agent_vol_map[key])
-                                for key in month_keys
+                                week_label_by_key[key]: _num(agent_vol_map[key])
+                                for key in week_keys
                             },
                             "trend": _trend_arrow(
                                 agent_vol_map.get(first_key), agent_vol_map.get(last_key)
                             ),
                             "bestMonth": _labeled_best_worst(
-                                agent_vol_map, month_label_by_key
+                                agent_vol_map, week_label_by_key
                             )[0],
                             "worstMonth": _labeled_best_worst(
-                                agent_vol_map, month_label_by_key
+                                agent_vol_map, week_label_by_key
                             )[1],
                         },
                     ],
@@ -563,21 +712,21 @@ def fetch_report_export(
 
     quantity_rows: list[dict[str, Any]] = []
     ordered_quantity = sorted(
-        agent_month_vol.keys(),
+        agent_week_vol.keys(),
         key=lambda aid: agent_meta.get(aid, {}).get("name", aid).lower(),
     )
     for index, agent_id in enumerate(ordered_quantity, start=1):
         meta = agent_meta.get(agent_id, {"name": agent_id, "alias": agent_id})
-        monthly = {
-            month_label_by_key[key]: agent_month_vol[agent_id].get(key, 0) for key in month_keys
+        weekly = {
+            week_label_by_key[key]: agent_week_vol[agent_id].get(key, 0) for key in week_keys
         }
         quantity_rows.append(
             {
                 "index": index,
                 "name": meta["name"],
                 "agentId": meta["alias"] or agent_id,
-                "monthly": monthly,
-                "total": sum(monthly.values()),
+                "monthly": weekly,
+                "total": sum(weekly.values()),
             }
         )
 
@@ -586,6 +735,12 @@ def fetch_report_export(
         if agent_ids
         else "all agents in range"
     )
+    if period_mode == "months":
+        period_note = "Monthly columns"
+        trend_label = "MONTHLY"
+    else:
+        period_note = "Weeks 1-7 / 8-14 / 15-21 / 22-28 / 29-31"
+        trend_label = "WEEKLY"
 
     return {
         "connected": True,
@@ -594,12 +749,14 @@ def fetch_report_export(
             "teamLabel": scope_pretty,
             "teamTitle": scope_title,
             "rangeLabel": _range_label(start, end),
-            "months": months,
+            "period": period_mode,
+            "months": periods,
             "subtitle": (
                 f"{scope_pretty} Quality Assurance Analysis  |  {_range_label(start, end)}"
-                f"  |  {filter_note}"
+                f"  |  {period_note}  |  {filter_note}"
             ),
             "agentFilter": agent_ids,
+            "trendLabel": trend_label,
         },
         "summary": {
             "totalAudits": total_audits,

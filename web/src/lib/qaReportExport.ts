@@ -8,9 +8,11 @@ export type ReportExportPayload = {
     teamLabel: string;
     teamTitle: string;
     rangeLabel: string;
+    period?: "months" | "weeks";
     months: Array<{ key: string; label: string }>;
     subtitle: string;
     agentFilter?: string[];
+    trendLabel?: string;
   };
   summary: {
     totalAudits: number;
@@ -28,8 +30,11 @@ export type ReportExportPayload = {
     agentId: string;
     name: string;
     alias: string;
+    team?: string;
     totalAudits: number;
     avgScore: string;
+    teamAvg?: string;
+    vsTeam?: string;
     masterTrend: Array<{
       metric: string;
       values: Record<string, string>;
@@ -41,8 +46,12 @@ export type ReportExportPayload = {
   agents: Array<{
     name: string;
     alias: string;
+    team?: string;
     overallAvg: string;
+    teamAvg?: string;
+    vsTeam?: string;
     monthly: Record<string, string>;
+    teamWeekly?: Record<string, string>;
     trend: string;
     delta: string;
     bestMonth: string;
@@ -288,20 +297,38 @@ function paintMerged(
   }
 }
 
+function periodMode(payload: ReportExportPayload): "months" | "weeks" {
+  return payload.meta.period === "months" ? "months" : "weeks";
+}
+
+function isWeekly(payload: ReportExportPayload): boolean {
+  return periodMode(payload) === "weeks";
+}
+
 function buildMonthlyTrend(wb: ExcelJS.Workbook, payload: ReportExportPayload) {
   const team = payload.meta.teamLabel;
-  const ws = wb.addWorksheet(`Monthly Trend — ${team}`.slice(0, 31), {
+  const weekly = isWeekly(payload);
+  const sheetName = weekly
+    ? `Weekly Trend — ${team}`.slice(0, 31)
+    : `Monthly Trend — ${team}`.slice(0, 31);
+  const ws = wb.addWorksheet(sheetName, {
     views: [{ showGridLines: false }],
   });
-  const months = monthLabels(payload);
-  const last = months[months.length - 1] || "";
-  const lastCol = 2 + months.length + 3;
+  const periods = monthLabels(payload);
+  const last = periods[periods.length - 1] || "";
+  const lastCol = weekly ? 4 + periods.length + 3 : 2 + periods.length + 3;
 
-  applyCols(ws, [28, 12, ...months.map(() => 11), 10, 11, 12]);
+  applyCols(
+    ws,
+    weekly
+      ? [28, 11, 11, 10, ...periods.map(() => 11), 10, 11, 12]
+      : [28, 12, ...periods.map(() => 11), 10, 11, 12],
+  );
 
   merge(ws, `A1:${col(lastCol)}1`);
-  ws.getCell("A1").value =
-    ` ${payload.meta.teamTitle} — MONTHLY PERFORMANCE TREND  |  ${payload.meta.rangeLabel}`;
+  ws.getCell("A1").value = weekly
+    ? ` ${payload.meta.teamTitle} — WEEKLY PERFORMANCE TREND (1-7 / 8-14 / 15-21 / 22-28 / 29-31)  |  ${payload.meta.rangeLabel}`
+    : ` ${payload.meta.teamTitle} — MONTHLY PERFORMANCE TREND  |  ${payload.meta.rangeLabel}`;
   paintMerged(ws, 1, lastCol, 1, styleTitle);
   setRowHeight(ws, 1, 30);
 
@@ -311,18 +338,16 @@ function buildMonthlyTrend(wb: ExcelJS.Workbook, payload: ReportExportPayload) {
     { label: `AVG SCORE (${last})`, value: payload.summary.avgScore, bg: C.green },
   ];
   kpis.forEach((kpi, index) => {
-    const start = 1 + index * 2;
-    const end = start + (index === 0 ? 1 : 0);
     if (index === 0) {
-      merge(ws, `${col(start)}4:${col(end)}4`);
-      merge(ws, `${col(start)}5:${col(end)}5`);
-      merge(ws, `${col(start)}6:${col(end)}6`);
-      paintMerged(ws, start, end, 4, (cell) => styleKpiLabel(cell, kpi.bg));
-      paintMerged(ws, start, end, 5, (cell) => styleKpiValue(cell, kpi.bg));
-      paintMerged(ws, start, end, 6, (cell) => styleKpiRule(cell, kpi.bg));
-      ws.getCell(4, start).value = kpi.label;
-      ws.getCell(5, start).value = kpi.value;
-      ws.getCell(6, start).value = "━━━━";
+      merge(ws, "A4:B4");
+      merge(ws, "A5:B5");
+      merge(ws, "A6:B6");
+      paintMerged(ws, 1, 2, 4, (cell) => styleKpiLabel(cell, kpi.bg));
+      paintMerged(ws, 1, 2, 5, (cell) => styleKpiValue(cell, kpi.bg));
+      paintMerged(ws, 1, 2, 6, (cell) => styleKpiRule(cell, kpi.bg));
+      ws.getCell(4, 1).value = kpi.label;
+      ws.getCell(5, 1).value = kpi.value;
+      ws.getCell(6, 1).value = "━━━━";
     } else {
       const c = index === 1 ? 3 : 4;
       styleKpiLabel(ws.getCell(4, c), kpi.bg);
@@ -336,13 +361,25 @@ function buildMonthlyTrend(wb: ExcelJS.Workbook, payload: ReportExportPayload) {
   setRowHeight(ws, 5, 32);
   setRowHeight(ws, 6, 10);
 
-  months.forEach((label, index) => {
-    const cell = ws.getCell(8, 3 + index);
+  const periodStartCol = weekly ? 5 : 3;
+  periods.forEach((label, index) => {
+    const cell = ws.getCell(8, periodStartCol + index);
     cell.value = label;
     styleHeader(cell, C.gold);
   });
 
-  const headers = ["AGENT NAME", "OVERALL AVG", ...months, "TREND", "Δ CHANGE", "BEST MONTH"];
+  const headers = weekly
+    ? [
+        "AGENT NAME",
+        "AGENT AVG",
+        "TEAM AVG",
+        "VS TEAM",
+        ...periods,
+        "TREND",
+        "Δ CHANGE",
+        "BEST WEEK",
+      ]
+    : ["AGENT NAME", "OVERALL AVG", ...periods, "TREND", "Δ CHANGE", "BEST MONTH"];
   headers.forEach((label, index) => {
     const cell = ws.getCell(9, index + 1);
     cell.value = label;
@@ -354,15 +391,30 @@ function buildMonthlyTrend(wb: ExcelJS.Workbook, payload: ReportExportPayload) {
     const zebra = rowIndex % 2 === 1;
     styleBody(ws.getCell(r, 1), { zebra, bold: true });
     ws.getCell(r, 1).value = agent.name;
-    styleScoreCell(ws.getCell(r, 2), agent.overallAvg, zebra);
-    months.forEach((label, index) => {
-      styleScoreCell(ws.getCell(r, 3 + index), agent.monthly[label] ?? "-", zebra);
-    });
-    styleTrendCell(ws.getCell(r, 3 + months.length), agent.trend, zebra);
-    styleBody(ws.getCell(r, 4 + months.length), { zebra, center: true, bold: true });
-    ws.getCell(r, 4 + months.length).value = agent.delta;
-    styleBody(ws.getCell(r, 5 + months.length), { zebra, center: true });
-    ws.getCell(r, 5 + months.length).value = agent.bestMonth;
+    if (weekly) {
+      styleScoreCell(ws.getCell(r, 2), agent.overallAvg, zebra);
+      styleScoreCell(ws.getCell(r, 3), agent.teamAvg ?? "-", zebra);
+      styleBody(ws.getCell(r, 4), { zebra, center: true, bold: true });
+      ws.getCell(r, 4).value = agent.vsTeam ?? "-";
+      periods.forEach((label, index) => {
+        styleScoreCell(ws.getCell(r, 5 + index), agent.monthly[label] ?? "-", zebra);
+      });
+      styleTrendCell(ws.getCell(r, 5 + periods.length), agent.trend, zebra);
+      styleBody(ws.getCell(r, 6 + periods.length), { zebra, center: true, bold: true });
+      ws.getCell(r, 6 + periods.length).value = agent.delta;
+      styleBody(ws.getCell(r, 7 + periods.length), { zebra, center: true });
+      ws.getCell(r, 7 + periods.length).value = agent.bestMonth;
+    } else {
+      styleScoreCell(ws.getCell(r, 2), agent.overallAvg, zebra);
+      periods.forEach((label, index) => {
+        styleScoreCell(ws.getCell(r, 3 + index), agent.monthly[label] ?? "-", zebra);
+      });
+      styleTrendCell(ws.getCell(r, 3 + periods.length), agent.trend, zebra);
+      styleBody(ws.getCell(r, 4 + periods.length), { zebra, center: true, bold: true });
+      ws.getCell(r, 4 + periods.length).value = agent.delta;
+      styleBody(ws.getCell(r, 5 + periods.length), { zebra, center: true });
+      ws.getCell(r, 5 + periods.length).value = agent.bestMonth;
+    }
   });
 }
 
@@ -396,6 +448,7 @@ function buildCriterionBreakdown(wb: ExcelJS.Workbook, payload: ReportExportPayl
     "TREND",
     `Δ ${first}→${last}`,
   ];
+  // months = week labels (1-7 / 8-14 / …)
 
   const writeCriteriaRows = (
     startRow: number,
@@ -582,8 +635,11 @@ function buildCaseTypeAnalysis(wb: ExcelJS.Workbook, payload: ReportExportPayloa
       "SHARE",
       "AVG SCORE",
       ...months.flatMap((label) => [`# Evals (${label})`, `Avg Score (${label})`]),
-      "BEST MONTH",
+      "BEST WEEK",
     ];
+    if (!isWeekly(payload)) {
+      headers[headers.length - 1] = "BEST MONTH";
+    }
     headers.forEach((label, index) => {
       const cell = ws.getCell(headerRow + 1, index + 1);
       cell.value = label;
@@ -642,8 +698,9 @@ function buildCaseTypeAnalysis(wb: ExcelJS.Workbook, payload: ReportExportPayloa
   }
 
   merge(ws, `A2:${col(lastCol)}2`);
-  ws.getCell("A2").value =
-    `Volume & average QA score by case type  |  Monthly breakdown (${payload.meta.rangeLabel})`;
+  ws.getCell("A2").value = isWeekly(payload)
+    ? `Volume & average QA score by case type  |  Weekly breakdown 1-7 / 8-14 / … (${payload.meta.rangeLabel})`
+    : `Volume & average QA score by case type  |  Monthly breakdown (${payload.meta.rangeLabel})`;
   paintMerged(ws, 1, lastCol, 2, styleSubtitle);
 
   merge(ws, "A4:C4");
@@ -671,7 +728,9 @@ function buildCaseTypeAnalysis(wb: ExcelJS.Workbook, payload: ReportExportPayloa
   setRowHeight(ws, 5, 32);
 
   merge(ws, `A8:${col(lastCol)}8`);
-  ws.getCell("A8").value = `  ${title} — TOP CASE TYPES  (All-Time + Monthly Volume & Score)`;
+  ws.getCell("A8").value = isWeekly(payload)
+    ? `  ${title} — TOP CASE TYPES  (All-Time + Weekly Volume & Score)`
+    : `  ${title} — TOP CASE TYPES  (All-Time + Monthly Volume & Score)`;
   paintMerged(ws, 1, lastCol, 8, styleSection);
 
   writeCaseHeaders(9);
@@ -689,7 +748,9 @@ function buildQuantity(wb: ExcelJS.Workbook, payload: ReportExportPayload) {
   applyCols(ws, [6, 28, 14, ...months.map(() => 14), 10]);
 
   merge(ws, `A1:${col(lastCol)}1`);
-  ws.getCell("A1").value = `${payload.meta.teamTitle} QUANTITY – MONTHLY TRACKER`;
+  ws.getCell("A1").value = isWeekly(payload)
+    ? `${payload.meta.teamTitle} QUANTITY – WEEKLY TRACKER (1-7 / 8-14 / …)`
+    : `${payload.meta.teamTitle} QUANTITY – MONTHLY TRACKER`;
   paintMerged(ws, 1, lastCol, 1, styleTitle);
   setRowHeight(ws, 1, 30);
 
@@ -860,9 +921,15 @@ async function buildMasterDashboard(wb: ExcelJS.Workbook, payload: ReportExportP
     views: [{ showGridLines: false }],
   });
   const months = monthLabels(payload);
+  const weekly = isWeekly(payload);
   const titleTeam = payload.meta.teamTitle;
-  const lastCol = Math.max(5, 1 + months.length + 3);
+  const lastCol = Math.max(weekly ? 8 : 5, 1 + months.length + 3);
   const byAgent = payload.masterByAgent ?? [];
+  const bestLabel = weekly ? "Best Week" : "Best Month";
+  const worstLabel = weekly ? "Worst Week" : "Worst Month";
+  const trendTitle = weekly
+    ? `WEEKLY PERFORMANCE TREND (1-7 / 8-14 / …) — ${payload.meta.rangeLabel}`
+    : `MONTHLY PERFORMANCE TREND — ${payload.meta.rangeLabel}`;
 
   applyCols(ws, [28, ...Array(Math.max(months.length, 2)).fill(13), 12, 12, 12]);
 
@@ -880,7 +947,7 @@ async function buildMasterDashboard(wb: ExcelJS.Workbook, payload: ReportExportP
     startRow: number,
     lines: ReportExportPayload["masterTrend"],
   ) => {
-    const headers = ["Metric", ...months, "Trend ↑↓", "Best Month", "Worst Month"];
+    const headers = ["Metric", ...months, "Trend ↑↓", bestLabel, worstLabel];
     headers.forEach((label, index) => {
       const cell = ws.getCell(startRow, index + 1);
       cell.value = label;
@@ -942,10 +1009,17 @@ async function buildMasterDashboard(wb: ExcelJS.Workbook, payload: ReportExportP
       paintMerged(ws, 1, lastCol, rowCursor, styleSection);
       rowCursor += 1;
 
-      const kpiDefs: Array<{ label: string; value: string | number; bg: FillColor }> = [
-        { label: "TOTAL AUDITS", value: agent.totalAudits, bg: C.teal },
-        { label: "AVG SCORE", value: agent.avgScore, bg: C.slate },
-      ];
+      const kpiDefs: Array<{ label: string; value: string | number; bg: FillColor }> = weekly
+        ? [
+            { label: "TOTAL AUDITS", value: agent.totalAudits, bg: C.teal },
+            { label: "AGENT AVG", value: agent.avgScore, bg: C.slate },
+            { label: "TEAM AVG", value: agent.teamAvg ?? "-", bg: C.green },
+            { label: "VS TEAM", value: agent.vsTeam ?? "-", bg: C.gold },
+          ]
+        : [
+            { label: "TOTAL AUDITS", value: agent.totalAudits, bg: C.teal },
+            { label: "AVG SCORE", value: agent.avgScore, bg: C.slate },
+          ];
       kpiDefs.forEach((kpi, index) => {
         const start = 1 + index * 2;
         const end = start + 1;
@@ -963,16 +1037,20 @@ async function buildMasterDashboard(wb: ExcelJS.Workbook, payload: ReportExportP
       rowCursor += 4;
 
       merge(ws, `A${rowCursor}:${col(lastCol)}${rowCursor}`);
-      ws.getCell(rowCursor, 1).value =
-        `   MONTHLY PERFORMANCE TREND — ${payload.meta.rangeLabel}`;
+      ws.getCell(rowCursor, 1).value = `   ${trendTitle}`;
       paintMerged(ws, 1, lastCol, rowCursor, styleSection);
       setRowHeight(ws, rowCursor, 20);
       rowCursor += 1;
 
-      rowCursor = writeTrendBlock(rowCursor, agent.masterTrend);
+      const trendLines = weekly
+        ? agent.masterTrend
+        : agent.masterTrend.filter(
+            (line) => !String(line.metric).toLowerCase().includes("team avg"),
+          );
+      rowCursor = writeTrendBlock(rowCursor, trendLines);
       rowCursor += 1;
 
-      const series = scoreSeriesFromTrend(agent.masterTrend, months);
+      const series = scoreSeriesFromTrend(trendLines, months);
       if (series.values.length > 0) {
         rowCursor = await embedTrendChart(wb, ws, {
           row: rowCursor,
@@ -1009,7 +1087,7 @@ async function buildMasterDashboard(wb: ExcelJS.Workbook, payload: ReportExportP
   setRowHeight(ws, 6, 10);
 
   merge(ws, `A8:${col(lastCol)}8`);
-  ws.getCell("A8").value = `   MONTHLY PERFORMANCE TREND — ${payload.meta.rangeLabel}`;
+  ws.getCell("A8").value = `   ${trendTitle}`;
   paintMerged(ws, 1, lastCol, 8, styleSection);
   setRowHeight(ws, 8, 22);
 

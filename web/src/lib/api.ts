@@ -150,12 +150,17 @@ export async function apiFetch(
 export async function loginRequest(
   login: string,
   password: string,
+  rememberMe = true,
 ): Promise<LoginResponse> {
   purgeLegacyTokenStorage();
   await ensureCsrfToken();
   const response = await apiFetch("/api/auth/login/", {
     method: "POST",
-    body: JSON.stringify({ login, password }),
+    body: JSON.stringify({
+      login,
+      password,
+      remember_me: Boolean(rememberMe),
+    }),
     skipAuthRetry: true,
   });
 

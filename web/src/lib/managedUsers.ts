@@ -259,6 +259,30 @@ export function isSuperAdmin(role: UserRole | null | undefined): boolean {
   return role === "superadmin";
 }
 
+/** Domains allowed for managed-user emails (match backend ALLOWED_EMAIL_DOMAINS). */
+export function allowedEmailDomains(): string[] {
+  const raw = String(import.meta.env.VITE_ALLOWED_EMAIL_DOMAINS || "detroitaxle.com");
+  return raw
+    .split(",")
+    .map((part) => part.trim().toLowerCase().replace(/^@/, ""))
+    .filter(Boolean);
+}
+
+export function assertAllowedWorkEmail(email: string): string {
+  const value = email.trim().toLowerCase();
+  if (!value || !value.includes("@")) {
+    throw new Error("A valid work email is required.");
+  }
+  const domain = value.split("@").pop() || "";
+  const allowed = allowedEmailDomains();
+  if (!allowed.includes(domain)) {
+    throw new Error(
+      `Email must use an allowed domain (${allowed.map((d) => `@${d}`).join(", ")}).`,
+    );
+  }
+  return value;
+}
+
 export function resolveActorRole(authUser: AuthUser | null): UserRole | null {
   if (!authUser) return null;
   if (authUser.is_superuser) return "superadmin";

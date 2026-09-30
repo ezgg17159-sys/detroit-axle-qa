@@ -23,7 +23,7 @@ type AuthContextValue = {
   user: AuthUser | null;
   isAuthenticated: boolean;
   bootstrapping: boolean;
-  login: (login: string, password: string) => Promise<void>;
+  login: (login: string, password: string, rememberMe?: boolean) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -66,11 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (loginValue: string, password: string) => {
-    const payload = await loginRequest(loginValue, password);
-    storeUser(payload.user);
-    setUser(payload.user);
-  }, []);
+  const login = useCallback(
+    async (loginValue: string, password: string, rememberMe = true) => {
+      const payload = await loginRequest(loginValue, password, rememberMe);
+      storeUser(payload.user);
+      setUser(payload.user);
+    },
+    [],
+  );
 
   const logout = useCallback(async () => {
     await logoutRequest();

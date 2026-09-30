@@ -34,6 +34,11 @@ const teamOptions: Array<{ id: TeamFilter; label: string }> = [
   { id: "sales", label: "Sales" },
 ];
 
+const exportPeriodOptions: Array<{ id: "months" | "weeks"; label: string }> = [
+  { id: "months", label: "Months" },
+  { id: "weeks", label: "Weeks" },
+];
+
 const EMPTY_KPIS: KpiCard[] = [
   { id: "total-audits", label: "Total Audits", value: "—" },
   { id: "calls", label: "Calls Avg", value: "—" },
@@ -201,11 +206,13 @@ function FilterSelect({
   value,
   options,
   onChange,
+  labelId = "reports-filter-label",
 }: {
   label: string;
-  value: TeamFilter;
-  options: Array<{ id: TeamFilter; label: string }>;
-  onChange: (value: TeamFilter) => void;
+  value: string;
+  options: Array<{ id: string; label: string }>;
+  onChange: (value: string) => void;
+  labelId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -231,7 +238,7 @@ function FilterSelect({
 
   return (
     <div className="reports-filter" ref={rootRef}>
-      <span className="reports-filter__label" id="reports-team-label">
+      <span className="reports-filter__label" id={labelId}>
         {label}
       </span>
       <button
@@ -239,7 +246,7 @@ function FilterSelect({
         className={`reports-filter__trigger${open ? " is-open" : ""}`}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-labelledby="reports-team-label"
+        aria-labelledby={labelId}
         onClick={() => setOpen((current) => !current)}
       >
         <span className="reports-filter__value">{selected}</span>
@@ -261,7 +268,7 @@ function FilterSelect({
         </svg>
       </button>
       {open ? (
-        <div className="reports-filter__menu" role="listbox" aria-labelledby="reports-team-label">
+        <div className="reports-filter__menu" role="listbox" aria-labelledby={labelId}>
           {options.map((option) => {
             const isActive = option.id === value;
             return (
@@ -408,6 +415,7 @@ export function ReportsPage() {
   };
 
   const [exporting, setExporting] = useState(false);
+  const [exportPeriod, setExportPeriod] = useState<"months" | "weeks">("weeks");
 
   const handleExport = async () => {
     if (exporting) return;
@@ -418,6 +426,7 @@ export function ReportsPage() {
         end: toIsoDate(range.end) || undefined,
         team,
         agentIds: selectedAgentIds,
+        period: exportPeriod,
       });
       if (!payload.connected) {
         notify(payload.detail || "External database disconnected. Export unavailable.", {
@@ -426,7 +435,10 @@ export function ReportsPage() {
         return;
       }
       await downloadQaReportWorkbook(payload);
-      notify("Report exported.", { variant: "success" });
+      notify(
+        exportPeriod === "months" ? "Monthly report exported." : "Weekly report exported.",
+        { variant: "success" },
+      );
     } catch (error) {
       notify(error instanceof Error ? error.message : "Unable to export report.", {
         variant: "error",
@@ -449,18 +461,28 @@ export function ReportsPage() {
 
           <FilterSelect
             label={teamScope.locked ? "Team" : "Filter by team"}
+            labelId="reports-team-label"
             value={team}
             options={
               teamScope.locked && teamScope.scope
                 ? teamOptions.filter((option) => option.id === teamScope.scope)
                 : teamOptions
             }
-            onChange={handleTeamChange}
+            onChange={(value) => handleTeamChange(value as TeamFilter)}
           />
         </div>
 
         <div className="reports-toolbar-right">
           <DateRangePicker value={range} onChange={setRange} />
+          <FilterSelect
+            label="Export by"
+            labelId="reports-export-period-label"
+            value={exportPeriod}
+            options={exportPeriodOptions}
+            onChange={(value) =>
+              setExportPeriod(value === "months" ? "months" : "weeks")
+            }
+          />
           <button
             type="button"
             className="cases-add-btn"

@@ -12,6 +12,7 @@ import {
   formatAuditDate,
   formatEarned,
   getAudit,
+  queueShareAuditEmail,
   resultLabel,
   saveAudit,
   teamLabel,
@@ -31,6 +32,7 @@ export function AuditDetailsPage() {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [listView, setListView] = useState(() => readAuditListView());
   const [savingReeval, setSavingReeval] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [loading, setLoading] = useState(true);
   useShellPageLoading(loading);
   const actionsRef = useRef<HTMLDivElement>(null);
@@ -142,6 +144,32 @@ export function AuditDetailsPage() {
     }
   };
 
+  const handleShareWithAgent = async () => {
+    if (sharing) return;
+    setSharing(true);
+    setActionsOpen(false);
+    try {
+      const mailed = await queueShareAuditEmail(audit, editorName);
+      const next: AuditRecord = { ...audit, shared: true };
+      const saved = await saveAuditRemote(next);
+      const merged = { ...saved, shared: true };
+      saveAudit(merged);
+      setAudit(merged);
+      notify(
+        mailed.emailTestMode
+          ? `Shared audit emailed to test inbox (${mailed.toEmail}).`
+          : `Shared audit emailed to ${mailed.toEmail || "agent"}.`,
+        { variant: "success" },
+      );
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Unable to share audit.", {
+        variant: "error",
+      });
+    } finally {
+      setSharing(false);
+    }
+  };
+
   const showOrderPhone = audit.team === "calls" || audit.team === "sales";
   const reevaluated = Boolean(audit.reevaluated);
   const showCreatedBy = listView === "audit";
@@ -194,6 +222,15 @@ export function AuditDetailsPage() {
                 />
                 <span className="audits-actions__check-label">Re evaluate</span>
               </label>
+              <button
+                type="button"
+                role="menuitem"
+                className="audits-actions__item"
+                disabled={sharing}
+                onClick={() => void handleShareWithAgent()}
+              >
+                {sharing ? "Sharing…" : audit.shared ? "Share again with agent" : "Share with agent"}
+              </button>
               <button type="button" role="menuitem" className="audits-actions__item audits-actions__item--danger" onClick={handleDelete}>
                 Delete
               </button>

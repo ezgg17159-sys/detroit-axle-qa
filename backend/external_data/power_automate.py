@@ -83,6 +83,12 @@ def prepare_payload(flow: str, payload: dict[str, Any]) -> dict[str, Any]:
         out["emailTestMode"] = bool(override)
         return out
 
+    if flow == "share-audit":
+        agent_email = str(out.get("agentEmail") or out.get("email") or "").strip()
+        out["toEmail"] = override or agent_email
+        out["emailTestMode"] = bool(override)
+        return out
+
     if flow == "avg-email" and isinstance(out.get("recipients"), list):
         recipients: list[Any] = []
         for row in out["recipients"]:

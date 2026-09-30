@@ -2,6 +2,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
+import { holdSurface } from "./theme/surface";
+
+holdSurface();
 
 if (import.meta.env.PROD) {
   const noop = () => undefined;

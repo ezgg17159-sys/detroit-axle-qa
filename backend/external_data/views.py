@@ -952,6 +952,8 @@ class ManagedUsersListView(APIView):
         try:
             item = upsert_managed_user(dict(request.data))
             return Response({"connected": True, "item": item}, status=status.HTTP_201_CREATED)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
             return Response({"detail": _exc_detail(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
@@ -967,6 +969,8 @@ class ManagedUserDetailView(APIView):
         try:
             item = upsert_managed_user(data)
             return Response({"connected": True, "item": item})
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
             return Response({"detail": _exc_detail(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
@@ -1075,6 +1079,7 @@ class ReportsView(APIView):
             for item in (request.query_params.get("agentIds") or "").split(",")
             if item.strip()
         ]
+        period = (request.query_params.get("period") or "weeks").strip().lower()
         export = (request.query_params.get("export") or "").strip().lower() in {
             "1",
             "true",
@@ -1085,7 +1090,11 @@ class ReportsView(APIView):
             if export:
                 return Response(
                     fetch_report_export(
-                        start=start, end=end, team=team, agent_ids=agent_ids
+                        start=start,
+                        end=end,
+                        team=team,
+                        agent_ids=agent_ids,
+                        period=period,
                     )
                 )
             return Response(

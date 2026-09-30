@@ -175,9 +175,8 @@ export function CasesPage() {
       if (payload.connected) {
         const live = payload.metrics as CaseRecord[];
         const liveIdSet = new Set(live.map((row) => row.id));
-        const localOnly = listCases().filter((row) => !liveIdSet.has(row.id));
         setLiveIds(liveIdSet);
-        setRows([...live, ...localOnly]);
+        setRows(live);
       } else {
         setLiveIds(new Set());
         setRows(listCases());

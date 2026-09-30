@@ -1,0 +1,43 @@
+# Production-oriented stack: gunicorn API + built SPA (same container).
+# Auth DB uses Postgres. External QA data uses the existing QA_DB_* connection.
+
+services:
+  auth-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DJANGO_DB_NAME:-daq_auth}
+      POSTGRES_USER: ${DJANGO_DB_USER:-daq}
+      POSTGRES_PASSWORD: ${DJANGO_DB_PASSWORD:?set DJANGO_DB_PASSWORD}
+    ports:
+      # Host-side tools (migrate from venv) use DJANGO_DB_PORT=5433 in .env
+      - "5433:5432"
+    volumes:
+      - daq_auth_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      DEBUG: "false"
+      USE_HTTPS: ${USE_HTTPS:-false}
+      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-false}
+      DJANGO_DB_ENGINE: django.db.backends.postgresql
+      DJANGO_DB_HOST: auth-db
+      DJANGO_DB_PORT: "5432"
+      DJANGO_DB_SSLMODE: disable
+      FRONTEND_APP_URL: ${FRONTEND_APP_URL:-http://127.0.0.1:8000}
+      SPA_DIST_DIR: /app/web/dist
+    depends_on:
+      auth-db:
+        condition: service_healthy
+
+volumes:
+  daq_auth_pg:

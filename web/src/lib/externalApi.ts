@@ -846,12 +846,14 @@ export async function fetchReportsExport(params: {
   end?: string;
   team?: string;
   agentIds?: string[];
+  period?: "months" | "weeks";
 }): Promise<ReportExportPayload> {
   const query = new URLSearchParams({
     start: params.start || "",
     end: params.end || "",
     team: teamQuery(params.team),
     export: "1",
+    period: params.period === "months" ? "months" : "weeks",
   });
   if (params.agentIds?.length) query.set("agentIds", params.agentIds.join(","));
   return getJson<ReportExportPayload>(`/api/reports/?${query}`);

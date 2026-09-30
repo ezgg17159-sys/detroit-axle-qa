@@ -686,9 +686,7 @@ export function SupervisorRequestsPage() {
             updatedAt: String(row.updatedAt || ""),
           } satisfies SupervisorRequest;
         });
-        const liveIds = new Set(live.map((row) => row.id));
-        const localOnly = listSupervisorRequests().filter((row) => !liveIds.has(row.id));
-        setRows([...live, ...localOnly]);
+        setRows(live);
       } else {
         setRows(listSupervisorRequests());
       }

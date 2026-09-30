@@ -163,6 +163,11 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# Built Vite SPA (npm run build → web/dist). Served by WhiteNoise at site root in production.
+SPA_DIST_DIR = Path(
+    os.environ.get("SPA_DIST_DIR") or (BASE_DIR.parent / "web" / "dist")
+).resolve()
+WHITENOISE_ROOT = SPA_DIST_DIR if SPA_DIST_DIR.is_dir() else None
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -253,11 +258,21 @@ PASSWORD_RESET_TIMEOUT = 60 * 60
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+
+# Keep me signed in → persistent refresh; unchecked → shorter browser-session refresh.
+JWT_REMEMBER_REFRESH_DAYS = int(os.environ.get("JWT_REMEMBER_REFRESH_DAYS", "30") or 30)
+JWT_SESSION_REFRESH_HOURS = int(os.environ.get("JWT_SESSION_REFRESH_HOURS", "12") or 12)
+
+# Comma-separated allowlist for managed-user / provisioned login emails.
+ALLOWED_EMAIL_DOMAINS = [
+    d.strip().lower().lstrip("@")
+    for d in _env_list("ALLOWED_EMAIL_DOMAINS", ["detroitaxle.com"])
+]
 
 CACHES = {
     "default": {
@@ -302,9 +317,13 @@ LOGGING = {
 # Allow Power Automate client email redirects only when explicitly enabled (never in prod).
 ALLOW_EMAIL_TEST_OVERRIDE = _env_bool("ALLOW_EMAIL_TEST_OVERRIDE", default=DEBUG)
 
-# Public app origin for email deep links (forgot-password reset URL, etc.)
+# Public app origin for email deep links (forgot-password reset URL, share-audit, etc.)
 FRONTEND_APP_URL = (
     os.environ.get("FRONTEND_APP_URL")
     or os.environ.get("VITE_APP_URL")
     or ("http://127.0.0.1:5173" if DEBUG else "")
 ).strip().rstrip("/")
+if not DEBUG and not FRONTEND_APP_URL:
+    raise ImproperlyConfigured(
+        "FRONTEND_APP_URL (or VITE_APP_URL) must be set when DEBUG=False."
+    )

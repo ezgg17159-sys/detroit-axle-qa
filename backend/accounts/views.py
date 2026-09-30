@@ -20,7 +20,12 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .auth_cookies import clear_jwt_cookies, set_jwt_cookies, REFRESH_COOKIE
+from .auth_cookies import (
+    clear_jwt_cookies,
+    issue_tokens_for_user,
+    set_jwt_cookies,
+    REFRESH_COOKIE,
+)
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -43,6 +48,7 @@ class ForgotPasswordRateThrottle(AnonRateThrottle):
 class LoginSerializer(serializers.Serializer):
     login = serializers.CharField()
     password = serializers.CharField(write_only=True)
+    remember_me = serializers.BooleanField(required=False, default=True)
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -181,6 +187,7 @@ class LoginView(APIView):
 
         login = serializer.validated_data["login"].strip()
         password = serializer.validated_data["password"]
+        remember_me = bool(serializer.validated_data.get("remember_me", True))
 
         user = User.objects.filter(
             Q(username__iexact=login) | Q(email__iexact=login)
@@ -209,12 +216,13 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        refresh = RefreshToken.for_user(authenticated)
+        refresh = issue_tokens_for_user(authenticated, remember_me=remember_me)
         response = Response({"user": serialize_user(authenticated)})
         set_jwt_cookies(
             response,
             access=str(refresh.access_token),
             refresh=str(refresh),
+            remember_me=remember_me,
         )
         return response
 
@@ -258,12 +266,14 @@ class CookieTokenRefreshView(APIView):
             except AttributeError:
                 pass
 
-            new_tokens = RefreshToken.for_user(user)
+            remember_me = bool(old_refresh.get("remember_me", True))
+            new_tokens = issue_tokens_for_user(user, remember_me=remember_me)
             response = Response({"detail": "Token refreshed."})
             set_jwt_cookies(
                 response,
                 access=str(new_tokens.access_token),
                 refresh=str(new_tokens),
+                remember_me=remember_me,
             )
             return response
         except (TokenError, InvalidToken):

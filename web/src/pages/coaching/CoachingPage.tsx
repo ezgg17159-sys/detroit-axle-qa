@@ -793,9 +793,7 @@ export function CoachingPage() {
             updatedAt: String(row.updatedAt || row.createdAt || ""),
           } satisfies CoachingSession;
         });
-        const liveIds = new Set(live.map((row) => row.id));
-        const localOnly = listCoachingSessions().filter((row) => !liveIds.has(row.id));
-        setRows([...live, ...localOnly]);
+        setRows(live);
       } else {
         setRows(listCoachingSessions());
       }

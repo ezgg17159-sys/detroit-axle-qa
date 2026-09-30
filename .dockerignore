@@ -1,0 +1,14 @@
+.venv
+.tools
+.git
+.env
+**/__pycache__
+*.pyc
+web/node_modules
+web/dist
+backend/db.sqlite3
+backend/staticfiles
+.idea
+.vscode
+*.md
+!README.md

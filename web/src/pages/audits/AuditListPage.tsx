@@ -200,35 +200,6 @@ function FilterSelect<T extends string>({
   );
 }
 
-function mergeLocalAudits(
-  live: AuditRecord[],
-  range: { start: Date | null; end: Date | null },
-): AuditRecord[] {
-  const local = listAudits();
-  const liveIds = new Set(live.map((row) => row.id));
-  const extras = local.filter((row) => {
-    if (liveIds.has(row.id)) return false;
-    if (!range.start && !range.end) return true;
-    if (!row.date) return false;
-    const day = new Date(`${row.date}T00:00:00`);
-    if (Number.isNaN(day.getTime())) return false;
-    if (range.start) {
-      const s = new Date(
-        range.start.getFullYear(),
-        range.start.getMonth(),
-        range.start.getDate(),
-      );
-      if (day < s) return false;
-    }
-    if (range.end) {
-      const e = new Date(range.end.getFullYear(), range.end.getMonth(), range.end.getDate());
-      if (day > e) return false;
-    }
-    return true;
-  });
-  return [...extras, ...live];
-}
-
 export function AuditListPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -306,7 +277,7 @@ export function AuditListPage() {
       });
       if (payload.connected) {
         setLoadDetail("");
-        setRows(mergeLocalAudits(payload.audits, { start: range.start, end: range.end }));
+        setRows(payload.audits);
       } else {
         setLoadDetail(payload.detail || "External database disconnected. Showing local audits.");
         setRows(listAudits());

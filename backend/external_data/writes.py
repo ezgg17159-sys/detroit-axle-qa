@@ -918,7 +918,10 @@ def upsert_managed_user(payload: dict[str, Any]) -> dict[str, Any]:
         if department == "super-admin" or role == "superadmin"
         else _db_team_label(department)
     )
-    email = str(payload.get("email") or "").strip().lower()
+    from .email_domains import assert_allowed_email
+
+    # Every managed user who may log in needs a real work email (forgot-password, share-audit).
+    email = assert_allowed_email(str(payload.get("email") or ""))
     agent_name = str(payload.get("agentName") or "").strip()
     display_name = str(payload.get("alias") or "").strip() or agent_name
     agent_id = str(payload.get("employeeId") or "").strip() or None

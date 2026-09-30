@@ -166,9 +166,8 @@ export function CaseTypesPage() {
       if (payload.connected) {
         const live = payload.caseTypes;
         const liveIdSet = new Set(live.map((row) => row.id));
-        const localOnly = listCaseTypes().filter((row) => !liveIdSet.has(row.id));
         setLiveIds(liveIdSet);
-        setRows([...live, ...localOnly]);
+        setRows(live);
       } else {
         setLiveIds(new Set());
         setRows(listCaseTypes());

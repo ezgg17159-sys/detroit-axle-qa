@@ -37,7 +37,7 @@ export function LoginPage() {
     event.preventDefault();
     setSubmitting(true);
     try {
-      await login(loginValue.trim(), password);
+      await login(loginValue.trim(), password, keepSignedIn);
       navigate("/", { replace: true });
     } catch (err) {
       notify(err instanceof Error ? err.message : "Unable to sign in.", {

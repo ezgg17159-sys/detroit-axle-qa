@@ -519,9 +519,8 @@ export function ProductionPage() {
           updatedAt: row.updatedAt,
         }));
         const liveIdSet = new Set(live.map((row) => row.id));
-        const localOnly = listProduction().filter((row) => !liveIdSet.has(row.id));
         setLiveIds(liveIdSet);
-        setRows([...live, ...localOnly]);
+        setRows(live);
       } else {
         setLiveIds(new Set());
         setRows(listProduction());

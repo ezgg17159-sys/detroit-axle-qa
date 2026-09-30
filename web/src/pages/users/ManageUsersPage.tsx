@@ -37,6 +37,7 @@ import {
   formatCreatedAt,
   isSuperAdmin,
   isSupervisorTeam,
+  assertAllowedWorkEmail,
   listManagedUsers,
   listRolePermissions,
   loadRolePermissionsRemote,
@@ -296,6 +297,14 @@ function UserFormModal({
   const handleSave = async () => {
     if (!draft.agentName.trim() || !draft.email.trim()) {
       notify("Agent name and email are required.", { variant: "error" });
+      return;
+    }
+    try {
+      assertAllowedWorkEmail(draft.email);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Invalid work email.", {
+        variant: "error",
+      });
       return;
     }
     if (isSupervisor && !isSupervisorTeam(draft.department)) {
@@ -739,9 +748,7 @@ function UsersTab() {
             } satisfies ManagedUser,
           ];
         });
-        const liveIds = new Set(live.map((row) => row.id));
-        const localOnly = listManagedUsers().filter((row) => !liveIds.has(row.id));
-        setRows([...live, ...localOnly]);
+        setRows(live);
       } else {
         setRows(listManagedUsers());
       }
