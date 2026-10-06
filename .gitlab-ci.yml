@@ -8,19 +8,22 @@ stages:
 
 backend:
   stage: test
-  image: python:3.12-slim-bookworm
-  before_script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends libpq5
-    - rm -rf /var/lib/apt/lists/*
-    - python -m pip install --upgrade pip
-    - pip install --no-cache-dir -r backend/requirements.txt
+  image: python:3.12-bookworm
   script:
-    # Project CI variables are for the server. Tests always use SQLite.
+    - python -V
+    - python -m pip install --upgrade pip
+    # Tests use SQLite. Skip the Postgres driver so this job does not need a compiler.
+    - python -c "from pathlib import Path; src=Path('backend/requirements.txt'); Path('backend/requirements-ci.txt').write_text(''.join(line for line in src.read_text().splitlines(True) if not line.startswith('psycopg2')))"
+    - python -m pip install --no-cache-dir -r backend/requirements-ci.txt
     - export DEBUG=true
     - export USE_HTTPS=false
     - export DJANGO_SECRET_KEY=ci-test-secret-key-not-for-production
-    - unset DJANGO_DB_ENGINE DJANGO_DB_NAME DJANGO_DB_USER DJANGO_DB_PASSWORD DJANGO_DB_HOST DJANGO_DB_PORT || true
+    - unset DJANGO_DB_ENGINE || true
+    - unset DJANGO_DB_NAME || true
+    - unset DJANGO_DB_USER || true
+    - unset DJANGO_DB_PASSWORD || true
+    - unset DJANGO_DB_HOST || true
+    - unset DJANGO_DB_PORT || true
     - cd backend
     - python manage.py check
     - python manage.py test accounts external_data -v 2
