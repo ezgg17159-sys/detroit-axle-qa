@@ -627,6 +627,57 @@ export function fetchManagedUsers(params?: { search?: string; limit?: number }) 
   });
 }
 
+export type ActivityLogItem = {
+  id: string;
+  createdAt: string;
+  actorUserId: string;
+  actorName: string;
+  actorEmail: string;
+  actorRole: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  summary: string;
+  detail: Record<string, unknown>;
+  requestPath: string;
+  requestMethod: string;
+  team: string;
+  ipAddress: string;
+};
+
+export async function fetchActivityLogs(params?: {
+  search?: string;
+  entityType?: string;
+  actor?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{
+  connected: boolean;
+  detail?: string;
+  total: number;
+  items: ActivityLogItem[];
+}> {
+  const query = new URLSearchParams({
+    search: params?.search || "",
+    entityType: params?.entityType || "",
+    actor: params?.actor || "",
+    limit: String(params?.limit ?? 100),
+    offset: String(params?.offset ?? 0),
+  });
+  const data = await getJson<{
+    connected?: boolean;
+    detail?: string;
+    total?: number;
+    items?: ActivityLogItem[];
+  }>(`/api/activity-logs/?${query}`);
+  return {
+    connected: Boolean(data.connected),
+    detail: data.detail,
+    total: data.total ?? 0,
+    items: data.items ?? [],
+  };
+}
+
 export async function fetchMonitoring(params?: {
   team?: string;
   status?: string;

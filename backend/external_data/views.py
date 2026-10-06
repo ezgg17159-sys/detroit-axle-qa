@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .activity import list_activity_logs
 from .analytics import fetch_analytics
 from .action_center import fetch_action_center
 from .catalog import list_agents, list_schema_tables
@@ -983,6 +984,38 @@ class ManagedUserDetailView(APIView):
             return Response({"connected": True, "deleted": True})
         except Exception as exc:
             return Response({"detail": _exc_detail(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+
+class ActivityLogsView(APIView):
+    permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def get(self, request):
+        if not external_db_enabled():
+            return Response(_db_disconnected_payload(items=[], total=0))
+        try:
+            limit = int(request.query_params.get("limit") or 100)
+            offset = int(request.query_params.get("offset") or 0)
+        except ValueError:
+            return Response({"detail": "Invalid limit/offset."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            return Response(
+                list_activity_logs(
+                    search=request.query_params.get("search") or "",
+                    entity_type=(
+                        request.query_params.get("entityType")
+                        or request.query_params.get("entity_type")
+                        or ""
+                    ),
+                    actor=request.query_params.get("actor") or "",
+                    limit=limit,
+                    offset=offset,
+                )
+            )
+        except Exception as exc:
+            return Response(
+                {"connected": False, "detail": _exc_detail(exc), "items": [], "total": 0},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
 
 class RolePermissionsView(APIView):

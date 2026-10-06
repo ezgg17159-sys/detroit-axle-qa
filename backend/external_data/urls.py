@@ -16,6 +16,7 @@ from .views import (
     EvaluationProgressView,
     EvaluationScheduledDayOffView,
     ExternalStatusView,
+    ActivityLogsView,
     ManagedUserDetailView,
     ManagedUsersListView,
     MonitoringDetailView,
@@ -76,6 +77,7 @@ urlpatterns = [
         ManagedUserDetailView.as_view(),
         name="managed-users-detail",
     ),
+    path("activity-logs/", ActivityLogsView.as_view(), name="activity-logs"),
     path("role-permissions/", RolePermissionsView.as_view(), name="role-permissions"),
     path(
         "integrations/power-automate/",
