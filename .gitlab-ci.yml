@@ -9,13 +9,18 @@ stages:
 backend:
   stage: test
   image: python:3.12-slim-bookworm
-  variables:
-    DEBUG: "true"
-    DJANGO_SECRET_KEY: ci-test-secret-key-not-for-production
   before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends libpq5
+    - rm -rf /var/lib/apt/lists/*
     - python -m pip install --upgrade pip
     - pip install --no-cache-dir -r backend/requirements.txt
   script:
+    # Project CI variables are for the server. Tests always use SQLite.
+    - export DEBUG=true
+    - export USE_HTTPS=false
+    - export DJANGO_SECRET_KEY=ci-test-secret-key-not-for-production
+    - unset DJANGO_DB_ENGINE DJANGO_DB_NAME DJANGO_DB_USER DJANGO_DB_PASSWORD DJANGO_DB_HOST DJANGO_DB_PORT || true
     - cd backend
     - python manage.py check
     - python manage.py test accounts external_data -v 2
