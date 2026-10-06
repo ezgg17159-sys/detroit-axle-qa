@@ -1,0 +1,30 @@
+# Replaces GitLab Auto DevOps (build / test / code_quality).
+# Those jobs need a container registry and a code-quality runner, which this
+# project does not have, so every push was failing before a deploy could start.
+
+stages:
+  - test
+  - build
+
+backend:
+  stage: test
+  image: python:3.12-slim-bookworm
+  variables:
+    DEBUG: "true"
+    DJANGO_SECRET_KEY: ci-test-secret-key-not-for-production
+  before_script:
+    - python -m pip install --upgrade pip
+    - pip install --no-cache-dir -r backend/requirements.txt
+  script:
+    - cd backend
+    - python manage.py check
+    - python manage.py test accounts external_data -v 2
+
+frontend:
+  stage: build
+  image: node:22-bookworm-slim
+  script:
+    - cd web
+    - npm ci
+    - npm run lint
+    - npm run build
