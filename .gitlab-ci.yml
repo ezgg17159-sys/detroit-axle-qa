@@ -34,6 +34,21 @@ frontend:
   stage: build
   image: node:22-bookworm-slim
   script:
+    # Shell runner ignores image:. Its npm cannot read lockfileVersion 3.
+    - |
+      case "$(uname -m)" in
+        x86_64) NODE_ARCH=x64 ;;
+        aarch64|arm64) NODE_ARCH=arm64 ;;
+        *) echo "unsupported arch $(uname -m)"; exit 1 ;;
+      esac
+      NODE_VERSION=v22.23.3
+      PREFIX="$CI_PROJECT_DIR/.node"
+      mkdir -p "$PREFIX"
+      curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz" | tar -xz -C "$PREFIX" --strip-components=1
+      echo "$PREFIX/bin" >> "$CI_PROJECT_DIR/.node-path"
+    - export PATH="$(cat "$CI_PROJECT_DIR/.node-path"):$PATH"
+    - node -v
+    - npm -v
     - cd web
     - npm ci
     - npm run lint
