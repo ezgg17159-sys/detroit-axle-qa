@@ -10,14 +10,13 @@ backend:
   stage: test
   image: python:3.12-bookworm
   script:
-    # Shell runner has python3 only. No python, no python3-venv, and image: is ignored.
-    - python3 -V
-    - python3 -m pip --version || curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --user
+    # Shell runner is Python 3.10 and ignores image:. Django 6.1 needs 3.12.
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
-    - python3 -m pip install --user --upgrade pip
-    # Tests use SQLite. Skip the Postgres driver so this job does not need a compiler.
-    - python3 -c "from pathlib import Path; src=Path('backend/requirements.txt'); Path('backend/requirements-ci.txt').write_text(''.join(line for line in src.read_text().splitlines(True) if not line.startswith('psycopg2')))"
-    - python3 -m pip install --user --no-cache-dir -r backend/requirements-ci.txt
+    - uv python install 3.12
+    - uv venv --python 3.12 "$CI_PROJECT_DIR/.venv"
+    - . "$CI_PROJECT_DIR/.venv/bin/activate"
+    - uv pip install -r backend/requirements.txt
     - export DEBUG=true
     - export USE_HTTPS=false
     - export DJANGO_SECRET_KEY=ci-test-secret-key-not-for-production
@@ -28,8 +27,8 @@ backend:
     - unset DJANGO_DB_HOST || true
     - unset DJANGO_DB_PORT || true
     - cd backend
-    - python3 manage.py check
-    - python3 manage.py test accounts external_data -v 2
+    - python manage.py check
+    - python manage.py test accounts external_data -v 2
 
 frontend:
   stage: build
