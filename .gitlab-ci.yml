@@ -10,7 +10,10 @@ backend:
   stage: test
   image: python:3.12-bookworm
   script:
-    - python -V
+    # Kobe Generic Runner 4 is a shell executor. It ignores image: and has python3, not python.
+    - python3 -V
+    - python3 -m venv "$CI_PROJECT_DIR/.venv"
+    - . "$CI_PROJECT_DIR/.venv/bin/activate"
     - python -m pip install --upgrade pip
     # Tests use SQLite. Skip the Postgres driver so this job does not need a compiler.
     - python -c "from pathlib import Path; src=Path('backend/requirements.txt'); Path('backend/requirements-ci.txt').write_text(''.join(line for line in src.read_text().splitlines(True) if not line.startswith('psycopg2')))"
